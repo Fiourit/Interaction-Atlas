@@ -1,0 +1,21 @@
+{
+  "name": "interaction-atlas",
+  "version": "1.0.0",
+  "description": "A live social experiment: a shared, rule-minimal digital space",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "collaboration",
+    "canvas",
+    "social",
+    "experiment"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.2"
+  }
+}
+
