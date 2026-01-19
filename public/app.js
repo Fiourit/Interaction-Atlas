@@ -21,7 +21,15 @@ let currentPathId = null;
 // Initialize canvas
 function initCanvas() {
     canvas = document.getElementById('canvas');
+    if (!canvas) {
+        console.error('Canvas element not found!');
+        return;
+    }
     ctx = canvas.getContext('2d');
+    
+    // Set initial canvas style
+    canvas.style.display = 'block';
+    canvas.style.cursor = 'crosshair';
     
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
@@ -82,20 +90,40 @@ function initCanvas() {
 
 function resizeCanvas() {
     const container = document.getElementById('canvasContainer');
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
+    if (!container || !canvas) return;
+    
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight - 60; // Subtract top bar height
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    // Set canvas display size
+    canvas.style.width = width + 'px';
+    canvas.style.height = height + 'px';
+    
     redrawCanvas();
 }
 
 function getCanvasCoordinates(e) {
+    if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left - panX * scale) / scale;
-    const y = (e.clientY - rect.top - panY * scale) / scale;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = ((e.clientX - rect.left) * scaleX - panX * scale) / scale;
+    const y = ((e.clientY - rect.top) * scaleY - panY * scale) / scale;
     return { x, y };
 }
 
 function handleMouseDown(e) {
-    if (e.button !== 0) return; // Only left click
+    if (!canvas || !ctx) return;
+    if (e.button !== 0 && mode !== 'erase') return; // Only left click for draw/text
+    
+    // Prevent default for middle mouse button (pan)
+    if (e.button === 1) {
+        e.preventDefault();
+        return;
+    }
     
     const coords = getCanvasCoordinates(e);
     
@@ -107,8 +135,12 @@ function handleMouseDown(e) {
             participantNumber: participantNumber
         });
         
+        ctx.save();
+        ctx.scale(scale, scale);
+        ctx.translate(panX, panY);
         ctx.beginPath();
         ctx.moveTo(coords.x, coords.y);
+        ctx.restore();
         
         socket.emit('canvasAction', {
             type: 'draw',
@@ -125,6 +157,8 @@ function handleMouseDown(e) {
 }
 
 function handleMouseMove(e) {
+    if (!canvas || !ctx) return;
+    
     if (mode === 'draw' && isDrawing && currentPathId) {
         const coords = getCanvasCoordinates(e);
         const path = drawingPaths.get(currentPathId);
@@ -132,11 +166,16 @@ function handleMouseMove(e) {
             path.points.push({ x: coords.x, y: coords.y });
         }
         
+        ctx.save();
+        ctx.scale(scale, scale);
+        ctx.translate(panX, panY);
         ctx.lineTo(coords.x, coords.y);
         ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 / scale; // Adjust line width for zoom
         ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
         ctx.stroke();
+        ctx.restore();
         
         // Send to server
         socket.emit('canvasAction', {
@@ -197,26 +236,49 @@ function handleTouchEnd(e) {
 }
 
 function handleWheel(e) {
+    if (!canvas) return;
     e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const coords = getCanvasCoordinates(e);
     
-    scale *= delta;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Get canvas coordinates before zoom
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const worldX = (mouseX * scaleX - panX * scale) / scale;
+    const worldY = (mouseY * scaleY - panY * scale) / scale;
+    
+    // Zoom
+    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+    scale *= zoomFactor;
     scale = Math.max(0.1, Math.min(5, scale));
     
-    panX = coords.x - (e.clientX - canvas.getBoundingClientRect().left) / scale;
-    panY = coords.y - (e.clientY - canvas.getBoundingClientRect().top) / scale;
+    // Adjust pan to zoom towards mouse position
+    panX = (mouseX * scaleX) / scale - worldX;
+    panY = (mouseY * scaleY) / scale - worldY;
     
     redrawCanvas();
 }
 
 function showTextInput(x, y) {
+    if (!canvas) return;
     const overlay = document.getElementById('textInputOverlay');
     const input = document.getElementById('textInput');
     
+    if (!overlay || !input) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    // Convert canvas coordinates to screen coordinates
+    const screenX = (x * scale + panX * scale) * (rect.width / canvas.width) + rect.left;
+    const screenY = (y * scale + panY * scale) * (rect.height / canvas.height) + rect.top;
+    
     overlay.style.display = 'block';
-    overlay.style.left = (x * scale + panX * scale) + 'px';
-    overlay.style.top = (y * scale + panY * scale) + 'px';
+    overlay.style.left = screenX + 'px';
+    overlay.style.top = screenY + 'px';
     
     input.value = '';
     input.focus();
@@ -249,6 +311,8 @@ function eraseAt(x, y) {
 }
 
 function redrawCanvas() {
+    if (!canvas || !ctx) return;
+    
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.scale(scale, scale);
@@ -273,14 +337,14 @@ function redrawCanvas() {
                     ctx.lineTo(points[i].x, points[i].y);
                 }
                 ctx.strokeStyle = '#e0e0e0';
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 2 / scale; // Adjust for zoom
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 ctx.stroke();
             }
         } else if (item.type === 'text') {
             ctx.fillStyle = '#e0e0e0';
-            ctx.font = `${item.fontSize || 16}px sans-serif`;
+            ctx.font = `${(item.fontSize || 16) / scale}px sans-serif`; // Adjust font size for zoom
             ctx.fillText(item.text, item.x, item.y);
         }
     });
@@ -307,11 +371,24 @@ socket.on('joined', (data) => {
     document.getElementById('joinModal').classList.remove('show');
     document.getElementById('mainInterface').style.display = 'flex';
     
+    // Ensure canvas is initialized and visible
+    if (!canvas) {
+        initCanvas();
+    }
+    
+    // Resize canvas to fit container
+    setTimeout(() => {
+        resizeCanvas();
+        redrawCanvas();
+    }, 100);
+    
     updateParticipantCount(data.roomState.participants.length);
     
     // Set room start time if room is active
     if (data.roomState.roomActive && data.roomState.timeElapsed) {
         roomStartTime = Date.now() - data.roomState.timeElapsed;
+    } else if (data.roomState.roomActive) {
+        roomStartTime = Date.now();
     }
     
     redrawCanvas();
@@ -589,6 +666,11 @@ function updateParticipantCount(count) {
     }
 }
 
-// Initialize
-initCanvas();
+// Initialize canvas when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCanvas);
+} else {
+    // DOM already loaded
+    setTimeout(initCanvas, 0);
+}
 
