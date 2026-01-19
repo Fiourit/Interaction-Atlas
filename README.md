@@ -66,9 +66,22 @@ Simply open `interaction-atlas.html` in a web browser. It will work in local mod
    The server will run on port 8080 by default (or the PORT environment variable if set).
 
 3. **Open in Browser**:
-   - Open `interaction-atlas.html` in your web browser
+   - Visit the server URL (e.g., `http://localhost:8080` or your deployed URL)
    - The client will automatically connect to the WebSocket server
    - If running locally, open multiple browser tabs/windows to see real-time collaboration
+
+### Multiple Rooms
+
+The application supports **multiple rooms** simultaneously, each with up to 20 participants:
+
+- **Default Room**: Visit `https://your-app.com/` - joins the "default" room
+- **Custom Rooms**: Visit `https://your-app.com/?room=room1` - joins "room1"
+- **More Examples**: 
+  - `https://your-app.com/?room=room1`
+  - `https://your-app.com/?room=room2`
+  - `https://your-app.com/?room=my-session`
+
+Each room is completely isolated - participants in different rooms cannot see or interact with each other. The room name is displayed in the top bar if it's not the default room.
 
 ## Usage
 

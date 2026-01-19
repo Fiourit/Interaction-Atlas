@@ -52,6 +52,12 @@ wss.on('connection', (ws) => {
 
             switch (data.type) {
                 case 'join':
+                    // Prevent duplicate joins - if already joined, ignore
+                    if (participantId) {
+                        console.log('Participant already joined, ignoring duplicate join');
+                        return;
+                    }
+
                     roomId = data.roomId || 'default';
                     participantId = `${Date.now()}-${Math.random()}`;
 

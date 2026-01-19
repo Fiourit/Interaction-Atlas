@@ -87,6 +87,13 @@
             color: #888;
         }
 
+        #room-indicator {
+            font-size: 12px;
+            color: #4a9eff;
+            margin-left: 10px;
+            font-weight: 400;
+        }
+
         #participant-info {
             display: flex;
             gap: 15px;
@@ -483,7 +490,7 @@
 
         <div id="ui-overlay">
             <div id="top-bar">
-                <div id="title">INTERACTION ATLAS</div>
+                <div id="title">INTERACTION ATLAS<span id="room-indicator"></span></div>
                 <div id="participant-info">
                     <span id="participant-count">0 participants</span>
                     <span id="your-number"></span>
@@ -548,6 +555,13 @@
     </div>
 
     <script>
+        // Get room ID from URL parameter or use default
+        function getRoomIdFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            const roomParam = params.get('room');
+            return roomParam || 'default';
+        }
+
         // State Management
         const state = {
             canvas: null,
@@ -575,7 +589,7 @@
             ws: null,
             participantId: null,
             useWebSocket: false,
-            roomId: 'default',
+            roomId: getRoomIdFromURL(),
             inPrivateSection: false,
             privateSectionId: null,
             sections: [],
@@ -584,6 +598,11 @@
 
         // WebSocket Connection
         function initWebSocket() {
+            // Close existing connection if any to prevent duplicates
+            if (state.ws && state.ws.readyState !== WebSocket.CLOSED) {
+                state.ws.close();
+            }
+
             const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsHost = window.location.hostname;
             const wsPort = window.location.port || '8080';
@@ -595,10 +614,13 @@
                 state.ws.onopen = () => {
                     console.log('WebSocket connected');
                     state.useWebSocket = true;
-                    state.ws.send(JSON.stringify({
-                        type: 'join',
-                        roomId: state.roomId
-                    }));
+                    // Only send join if not already joined (participantId will be set after successful join)
+                    if (!state.participantId) {
+                        state.ws.send(JSON.stringify({
+                            type: 'join',
+                            roomId: state.roomId
+                        }));
+                    }
                 };
                 
                 state.ws.onmessage = (event) => {
@@ -615,6 +637,8 @@
                 state.ws.onclose = () => {
                     console.log('WebSocket closed');
                     state.useWebSocket = false;
+                    // Reset participant ID so we can rejoin on reconnect
+                    state.participantId = null;
                     // Attempt to reconnect after 3 seconds
                     setTimeout(initWebSocket, 3000);
                 };
@@ -641,9 +665,12 @@
                     break;
                     
                 case 'participant_joined':
-                    state.participants.push(data.participant);
-                    updateParticipantList();
-                    addActionHistory(`#${data.participant.number}`, 'joined');
+                    // Check if participant already exists to prevent duplicates
+                    if (!state.participants.find(p => p.id === data.participant.id)) {
+                        state.participants.push(data.participant);
+                        updateParticipantList();
+                        addActionHistory(`#${data.participant.number}`, 'joined');
+                    }
                     break;
                     
                 case 'participant_left':
@@ -739,6 +766,14 @@
         function init() {
             state.canvas = document.getElementById('canvas');
             state.ctx = state.canvas.getContext('2d');
+            
+            // Display room indicator
+            const roomIndicator = document.getElementById('room-indicator');
+            if (state.roomId !== 'default') {
+                roomIndicator.textContent = `[Room: ${state.roomId}]`;
+            } else {
+                roomIndicator.textContent = '';
+            }
             
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
