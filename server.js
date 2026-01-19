@@ -77,7 +77,14 @@ wss.on('connection', (ws) => {
 
                     const room = rooms.get(roomId);
 
-                    // Check room capacity (max 20)
+                    // Clean up dead connections first
+                    room.participants.forEach((participant, id) => {
+                        if (participant.ws.readyState !== WebSocket.OPEN) {
+                            room.participants.delete(id);
+                        }
+                    });
+
+                    // Check room capacity (max 20) - strict check AFTER cleanup
                     if (room.participants.size >= 20) {
                         ws.send(JSON.stringify({
                             type: 'error',
@@ -90,6 +97,7 @@ wss.on('connection', (ws) => {
                     // Assign number
                     participantNumber = assignNumber(room);
                     if (!participantNumber) {
+                        // Double check after number assignment
                         ws.send(JSON.stringify({
                             type: 'error',
                             message: 'Room is full (max 20 participants)'
@@ -104,15 +112,20 @@ wss.on('connection', (ws) => {
                         ws: ws
                     });
 
+                    // Only include active participants (with open connections)
+                    const activeParticipants = Array.from(room.participants.values())
+                        .filter(p => p.ws.readyState === WebSocket.OPEN)
+                        .map(p => ({
+                            id: p.id,
+                            number: p.number
+                        }));
+
                     // Send current state to new participant
                     ws.send(JSON.stringify({
                         type: 'joined',
                         participantId: participantId,
                         number: participantNumber,
-                        participants: Array.from(room.participants.values()).map(p => ({
-                            id: p.id,
-                            number: p.number
-                        })),
+                        participants: activeParticipants,
                         drawings: room.drawings,
                         texts: room.texts,
                         sessionPhase: room.sessionPhase,
