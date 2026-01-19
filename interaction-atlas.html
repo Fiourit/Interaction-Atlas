@@ -1,0 +1,1295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INTERACTION ATLAS</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        #app {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            cursor: crosshair;
+            overflow: hidden;
+            background: #111;
+        }
+
+        #canvas {
+            display: block;
+            background: #111;
+            cursor: crosshair;
+        }
+
+        #canvas.canvas-draw {
+            cursor: crosshair;
+        }
+
+        #canvas.canvas-text {
+            cursor: text;
+        }
+
+        #canvas.canvas-eraser {
+            cursor: grab;
+        }
+
+        #canvas.canvas-pan {
+            cursor: grab;
+        }
+
+        #ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        #top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            pointer-events: all;
+            background: linear-gradient(to bottom, rgba(10, 10, 10, 0.9), transparent);
+        }
+
+        #title {
+            font-size: 18px;
+            font-weight: 300;
+            letter-spacing: 2px;
+            color: #888;
+        }
+
+        #room-indicator {
+            font-size: 12px;
+            color: #4a9eff;
+            margin-left: 10px;
+            font-weight: 400;
+        }
+
+        #participant-info {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        #participant-count {
+            font-size: 14px;
+            color: #666;
+        }
+
+        #your-number {
+            font-size: 14px;
+            color: #4a9eff;
+            font-weight: 500;
+        }
+
+        #toolbar {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            padding: 15px 25px;
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 50px;
+            pointer-events: all;
+            backdrop-filter: blur(10px);
+        }
+
+        .tool-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #e0e0e0;
+            padding: 10px 20px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .tool-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .tool-btn.active {
+            background: #4a9eff;
+            border-color: #4a9eff;
+            color: white;
+        }
+
+        #zoom-controls {
+            position: absolute;
+            right: 30px;
+            bottom: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: all;
+        }
+
+        .zoom-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #text-input-container {
+            position: absolute;
+            display: none;
+            pointer-events: all;
+        }
+
+        #text-input {
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #e0e0e0;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-family: inherit;
+            min-width: 200px;
+            outline: none;
+        }
+
+        #participant-list {
+            position: absolute;
+            top: 70px;
+            right: 30px;
+            background: rgba(20, 20, 20, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            min-width: 200px;
+            pointer-events: all;
+            backdrop-filter: blur(10px);
+            display: none;
+        }
+
+        #participant-list.visible {
+            display: block;
+        }
+
+        .participant-item {
+            padding: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .participant-item:last-child {
+            border-bottom: none;
+        }
+
+        .participant-name {
+            font-size: 13px;
+            color: #ccc;
+        }
+
+        .vote-btn {
+            background: transparent;
+            border: 1px solid rgba(255, 100, 100, 0.3);
+            color: #ff6464;
+            padding: 4px 12px;
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .vote-btn:hover {
+            background: rgba(255, 100, 100, 0.1);
+            border-color: rgba(255, 100, 100, 0.5);
+        }
+
+        .vote-btn.voted {
+            background: rgba(255, 100, 100, 0.2);
+            border-color: #ff6464;
+        }
+
+        .vote-count {
+            font-size: 11px;
+            color: #888;
+            margin-left: 5px;
+        }
+
+        #continuation-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            pointer-events: all;
+        }
+
+        #continuation-modal.visible {
+            display: flex;
+        }
+
+        .modal-content {
+            background: rgba(20, 20, 20, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            margin-bottom: 15px;
+            font-weight: 300;
+            letter-spacing: 1px;
+        }
+
+        .modal-text {
+            font-size: 16px;
+            color: #888;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .modal-btn {
+            padding: 12px 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: transparent;
+            color: #e0e0e0;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .modal-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .modal-btn.primary {
+            background: #4a9eff;
+            border-color: #4a9eff;
+            color: white;
+        }
+
+        .modal-btn.primary:hover {
+            background: #5aaeff;
+        }
+
+        #action-history {
+            position: absolute;
+            bottom: 100px;
+            left: 30px;
+            max-width: 300px;
+            pointer-events: all;
+        }
+
+        .action-item {
+            background: rgba(20, 20, 20, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #999;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .action-item.erase {
+            color: #ff6464;
+        }
+
+        .action-item.create {
+            color: #4a9eff;
+        }
+
+        #info-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 30px;
+            height: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(20, 20, 20, 0.8);
+            border-radius: 50%;
+            color: #888;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all 0.2s;
+            pointer-events: all;
+        }
+
+        #info-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #e0e0e0;
+        }
+
+        #instructions {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            pointer-events: all;
+        }
+
+        #instructions.visible {
+            display: flex;
+        }
+
+        .instructions-content {
+            background: rgba(20, 20, 20, 0.98);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 40px;
+            max-width: 700px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .instructions-title {
+            font-size: 28px;
+            margin-bottom: 20px;
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+
+        .instructions-text {
+            font-size: 15px;
+            color: #aaa;
+            line-height: 1.8;
+            margin-bottom: 15px;
+        }
+
+        .close-btn {
+            margin-top: 20px;
+            padding: 10px 25px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: transparent;
+            color: #e0e0e0;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #session-timer {
+            font-size: 12px;
+            color: #666;
+            margin-left: 15px;
+        }
+
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0a0a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10002;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .loading-text {
+            font-size: 18px;
+            color: #666;
+            letter-spacing: 3px;
+        }
+
+        .connection-status {
+            font-size: 12px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading">
+        <div class="loading-text">ENTERING SPACE...</div>
+        <div class="connection-status" id="connection-status">Connecting...</div>
+    </div>
+
+    <div id="app">
+        <div id="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <div id="ui-overlay">
+            <div id="top-bar">
+                <div id="title">INTERACTION ATLAS<span id="room-indicator"></span></div>
+                <div id="participant-info">
+                    <span id="participant-count">0 participants</span>
+                    <span id="your-number"></span>
+                    <span id="session-timer"></span>
+                </div>
+                <div id="info-btn" title="Instructions">?</div>
+            </div>
+
+            <div id="toolbar">
+                <button class="tool-btn active" data-tool="draw" id="draw-btn">Draw</button>
+                <button class="tool-btn" data-tool="text" id="text-btn">Text</button>
+                <button class="tool-btn" data-tool="eraser" id="eraser-btn">Eraser</button>
+                <button class="tool-btn" data-tool="pan" id="pan-btn">Pan</button>
+            </div>
+
+            <div id="zoom-controls">
+                <button class="zoom-btn" id="zoom-in">+</button>
+                <button class="zoom-btn" id="zoom-out">−</button>
+                <button class="zoom-btn" id="reset-view">⌂</button>
+            </div>
+
+            <div id="participant-list">
+                <div style="font-size: 14px; margin-bottom: 10px; color: #888;">Participants</div>
+                <div id="participants"></div>
+            </div>
+
+            <div id="action-history"></div>
+
+            <div id="text-input-container">
+                <input type="text" id="text-input" placeholder="Type and press Enter..." autocomplete="off">
+            </div>
+        </div>
+
+        <div id="continuation-modal">
+            <div class="modal-content">
+                <!-- Modal content will be dynamically generated -->
+            </div>
+        </div>
+
+        <div id="instructions">
+            <div class="instructions-content">
+                <div class="instructions-title">INTERACTION ATLAS</div>
+                <div class="instructions-text">
+                    A live social experiment: a shared, rule-minimal digital space in which people survive, connect, and continue only by being interesting to one another.
+                </div>
+                <div class="instructions-text">
+                    <strong>How it works:</strong><br>
+                    • Draw or write anywhere on the canvas<br>
+                    • Zoom in/out to explore the infinite space<br>
+                    • Respond directly on top of others' work<br>
+                    • Erase or overwrite content freely<br>
+                    • All actions are transparent - participant numbers are visible<br>
+                    • Vote to remove participants if needed (4+ votes required)<br>
+                    • After 20-40 minutes, you'll be asked if you want to continue together
+                </div>
+                <div class="instructions-text">
+                    There are no predefined topics, no categories, no algorithms. What remains is human judgment.
+                </div>
+                <button class="close-btn" id="close-instructions">Enter Space</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function getRoomIdFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            const roomParam = params.get('room');
+            const roomId = roomParam || 'default';
+            console.log('Room ID:', roomId);
+            return roomId;
+        }
+
+        const state = {
+            canvas: null,
+            ctx: null,
+            currentTool: 'draw',
+            isDrawing: false,
+            isErasing: false,
+            lastX: 0,
+            lastY: 0,
+            zoom: 1,
+            panX: 0,
+            panY: 0,
+            participants: [],
+            yourNumber: 0,
+            sessionStartTime: Date.now(),
+            votingActive: false,
+            votingRound: 0,
+            votes: {},
+            userVotes: {},
+            textElements: [],
+            drawings: [],
+            isPanning: false,
+            panStartX: 0,
+            panStartY: 0,
+            ws: null,
+            participantId: null,
+            roomId: getRoomIdFromURL(),
+            inPrivateSection: false,
+            privateSectionId: null,
+            sections: [],
+            sessionPhase: 'open',
+            maxParticipants: 20,
+            reconnectAttempts: 0,
+            maxReconnectAttempts: 10,
+            currentDrawing: null,
+            heartbeatInterval: null
+        };
+
+        function updateConnectionStatus(status) {
+            const statusEl = document.getElementById('connection-status');
+            if (statusEl) {
+                statusEl.textContent = status;
+            }
+        }
+
+        function initWebSocket() {
+            if (state.ws && (state.ws.readyState === WebSocket.CONNECTING || state.ws.readyState === WebSocket.OPEN)) {
+                console.log('WebSocket already connected or connecting');
+                return;
+            }
+
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsHost = window.location.hostname;
+            const wsPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+            const wsUrl = `${wsProtocol}//${wsHost}${wsPort !== '80' && wsPort !== '443' ? ':' + wsPort : ''}`;
+            
+            console.log('Connecting to:', wsUrl);
+            updateConnectionStatus('Connecting to server...');
+            
+            try {
+                state.ws = new WebSocket(wsUrl);
+                
+                state.ws.onopen = () => {
+                    console.log('WebSocket connected successfully');
+                    updateConnectionStatus('Connected! Joining room...');
+                    state.reconnectAttempts = 0;
+                    
+                    // Only send join if not already joined
+                    if (!state.participantId) {
+                        console.log('Sending join request for room:', state.roomId);
+                        state.ws.send(JSON.stringify({
+                            type: 'join',
+                            roomId: state.roomId
+                        }));
+                    }
+                    
+                    // Start heartbeat
+                    startHeartbeat();
+                };
+                
+                state.ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                };
+                
+                state.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    updateConnectionStatus('Connection error');
+                };
+                
+                state.ws.onclose = (event) => {
+                    console.log('WebSocket closed:', event.code, event.reason);
+                    stopHeartbeat();
+                    state.participantId = null;
+                    
+                    if (state.reconnectAttempts < state.maxReconnectAttempts) {
+                        state.reconnectAttempts++;
+                        const delay = Math.min(1000 * Math.pow(2, state.reconnectAttempts), 30000);
+                        updateConnectionStatus(`Reconnecting in ${Math.floor(delay/1000)}s... (${state.reconnectAttempts}/${state.maxReconnectAttempts})`);
+                        setTimeout(initWebSocket, delay);
+                    } else {
+                        updateConnectionStatus('Could not connect to server');
+                    }
+                };
+            } catch (error) {
+                console.error('Error creating WebSocket:', error);
+                updateConnectionStatus('Failed to connect');
+            }
+        }
+
+        function startHeartbeat() {
+            stopHeartbeat();
+            state.heartbeatInterval = setInterval(() => {
+                if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                    state.ws.send(JSON.stringify({ type: 'heartbeat' }));
+                }
+            }, 30000);
+        }
+
+        function stopHeartbeat() {
+            if (state.heartbeatInterval) {
+                clearInterval(state.heartbeatInterval);
+                state.heartbeatInterval = null;
+            }
+        }
+
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'joined':
+                    state.participantId = data.participantId;
+                    state.yourNumber = data.number;
+                    state.maxParticipants = data.maxParticipants || 20;
+                    document.getElementById('your-number').textContent = `You are #${state.yourNumber}`;
+                    state.participants = data.participants || [];
+                    state.drawings = data.drawings || [];
+                    state.textElements = data.texts || [];
+                    state.sessionPhase = data.sessionPhase || 'open';
+                    state.votingRound = data.votingRound || 0;
+                    
+                    console.log(`✓ Joined as #${state.yourNumber}. Total participants: ${state.participants.length}/${state.maxParticipants}`);
+                    updateConnectionStatus('');
+                    updateParticipantList();
+                    redrawCanvas();
+                    
+                    setTimeout(() => {
+                        document.getElementById('loading').style.display = 'none';
+                        document.getElementById('instructions').classList.add('visible');
+                    }, 500);
+                    break;
+                    
+                case 'participant_joined':
+                    if (!state.participants.find(p => p.id === data.participant.id)) {
+                        state.participants.push(data.participant);
+                        updateParticipantList();
+                        addActionHistory(`#${data.participant.number}`, 'joined');
+                        console.log(`Participant #${data.participant.number} joined. Total: ${data.totalCount}/${state.maxParticipants}`);
+                    }
+                    break;
+                    
+                case 'participants_update':
+                    state.participants = data.participants || [];
+                    updateParticipantList();
+                    break;
+                    
+                case 'participant_left':
+                    state.participants = state.participants.filter(p => p.id !== data.participantId);
+                    updateParticipantList();
+                    addActionHistory(data.number ? `#${data.number}` : 'Someone', 'left');
+                    console.log(`Participant left. Remaining: ${data.totalCount}/${state.maxParticipants}`);
+                    break;
+                    
+                case 'drawing':
+                    if (data.drawing && !state.drawings.find(d => d.id === data.drawing.id)) {
+                        state.drawings.push(data.drawing);
+                        redrawCanvas();
+                    }
+                    break;
+                    
+                case 'drawing_update':
+                    if (data.drawingId && data.paths) {
+                        const drawing = state.drawings.find(d => d.id === data.drawingId);
+                        if (drawing) {
+                            drawing.paths.push(...data.paths);
+                            redrawCanvas();
+                        }
+                    }
+                    break;
+                    
+                case 'text_added':
+                    if (data.text && !state.textElements.find(t => t.id === data.text.id)) {
+                        state.textElements.push(data.text);
+                        redrawCanvas();
+                        addActionHistory(`#${data.text.number}`, 'created text');
+                    }
+                    break;
+                    
+                case 'erased':
+                    state.drawings = data.drawings || [];
+                    state.textElements = data.texts || [];
+                    redrawCanvas();
+                    if (data.number !== state.yourNumber) {
+                        addActionHistory(`#${data.number}`, 'erased content');
+                    }
+                    break;
+                    
+                case 'vote_update':
+                    state.votes[data.targetId] = data.votes;
+                    updateParticipantList();
+                    break;
+                    
+                case 'participant_removed':
+                    state.participants = state.participants.filter(p => p.id !== data.participantId);
+                    updateParticipantList();
+                    addActionHistory(`#${data.number}`, 'was removed');
+                    break;
+                    
+                case 'removed':
+                    alert(`You have been removed: ${data.reason}`);
+                    window.location.reload();
+                    break;
+                    
+                case 'voting_started':
+                    state.votingActive = true;
+                    state.votingRound = data.round;
+                    state.userVotes = {};
+                    showVotingInterface();
+                    break;
+                    
+                case 'voting_ended':
+                    state.votingActive = false;
+                    hideVotingInterface();
+                    break;
+                    
+                case 'sections_phase':
+                    state.sessionPhase = 'sections';
+                    showSectionsInterface(data.remainingNumbers);
+                    break;
+                    
+                case 'section_created':
+                    state.sections.push(data.section);
+                    updateSectionsList();
+                    break;
+                    
+                case 'section_invitation':
+                    showSectionInvitation(data);
+                    break;
+                    
+                case 'section_joined':
+                    state.inPrivateSection = true;
+                    state.privateSectionId = data.sectionId;
+                    updateUIForSection();
+                    break;
+                    
+                case 'error':
+                    console.error('Server error:', data.message);
+                    alert(data.message);
+                    if (data.message.includes('full')) {
+                        updateConnectionStatus('Room is full');
+                        document.getElementById('loading').style.display = 'none';
+                    }
+                    break;
+                    
+                case 'heartbeat_ack':
+                    // Connection is alive
+                    break;
+            }
+        }
+
+        function sendWebSocketMessage(message) {
+            if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+                state.ws.send(JSON.stringify(message));
+            } else {
+                console.warn('WebSocket not connected, cannot send message');
+            }
+        }
+
+        function init() {
+            state.canvas = document.getElementById('canvas');
+            state.ctx = state.canvas.getContext('2d');
+            
+            const roomIndicator = document.getElementById('room-indicator');
+            if (state.roomId !== 'default') {
+                roomIndicator.textContent = ` [Room: ${state.roomId}]`;
+            }
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            initWebSocket();
+            setupEventListeners();
+            startSessionTimer();
+        }
+
+        function resizeCanvas() {
+            state.canvas.width = window.innerWidth;
+            state.canvas.height = window.innerHeight;
+            redrawCanvas();
+        }
+
+        function redrawCanvas() {
+            const ctx = state.ctx;
+            ctx.clearRect(0, 0, state.canvas.width, state.canvas.height);
+            
+            ctx.save();
+            ctx.translate(state.panX, state.panY);
+            ctx.scale(state.zoom, state.zoom);
+
+            drawGrid();
+
+            state.drawings.forEach(draw => {
+                if (draw.paths && draw.paths.length > 0) {
+                    ctx.beginPath();
+                    ctx.moveTo(draw.paths[0].x, draw.paths[0].y);
+                    for (let i = 1; i < draw.paths.length; i++) {
+                        ctx.lineTo(draw.paths[i].x, draw.paths[i].y);
+                    }
+                    ctx.strokeStyle = draw.color || '#4a9eff';
+                    ctx.lineWidth = (draw.width || 3) / state.zoom;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
+                }
+            });
+
+            state.textElements.forEach(text => {
+                ctx.font = `${(text.size || 20) / state.zoom}px sans-serif`;
+                ctx.fillStyle = text.color || '#e0e0e0';
+                ctx.fillText(text.content, text.x, text.y);
+            });
+
+            ctx.restore();
+        }
+
+        function drawGrid() {
+            const ctx = state.ctx;
+            const gridSize = 50;
+            const offsetX = (-state.panX % (gridSize * state.zoom)) / state.zoom;
+            const offsetY = (-state.panY % (gridSize * state.zoom)) / state.zoom;
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 1 / state.zoom;
+
+            const startX = -10000 + offsetX;
+            const startY = -10000 + offsetY;
+            const endX = 10000 + offsetX;
+            const endY = 10000 + offsetY;
+
+            for (let x = startX; x < endX; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, startY);
+                ctx.lineTo(x, endY);
+                ctx.stroke();
+            }
+
+            for (let y = startY; y < endY; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(startX, y);
+                ctx.lineTo(endX, y);
+                ctx.stroke();
+            }
+        }
+
+        function setupEventListeners() {
+            document.querySelectorAll('.tool-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    state.currentTool = btn.dataset.tool;
+                    updateCanvasCursor();
+                });
+            });
+
+            document.getElementById('zoom-in').addEventListener('click', () => {
+                state.zoom = Math.min(state.zoom * 1.2, 5);
+                redrawCanvas();
+            });
+
+            document.getElementById('zoom-out').addEventListener('click', () => {
+                state.zoom = Math.max(state.zoom / 1.2, 0.2);
+                redrawCanvas();
+            });
+
+            document.getElementById('reset-view').addEventListener('click', () => {
+                state.zoom = 1;
+                state.panX = 0;
+                state.panY = 0;
+                redrawCanvas();
+            });
+
+            state.canvas.addEventListener('mousedown', handleMouseDown);
+            state.canvas.addEventListener('mousemove', handleMouseMove);
+            state.canvas.addEventListener('mouseup', handleMouseUp);
+            state.canvas.addEventListener('mouseleave', handleMouseUp);
+            state.canvas.addEventListener('wheel', handleWheel);
+
+            document.getElementById('text-input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    addTextElement();
+                } else if (e.key === 'Escape') {
+                    hideTextInput();
+                }
+            });
+
+            document.getElementById('info-btn').addEventListener('click', () => {
+                document.getElementById('instructions').classList.add('visible');
+            });
+
+            document.getElementById('close-instructions').addEventListener('click', () => {
+                document.getElementById('instructions').classList.remove('visible');
+                document.getElementById('participant-list').classList.add('visible');
+            });
+        }
+
+        function updateCanvasCursor() {
+            state.canvas.className = `canvas-${state.currentTool}`;
+        }
+
+        function getCanvasCoordinates(e) {
+            const rect = state.canvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left - state.panX) / state.zoom;
+            const y = (e.clientY - rect.top - state.panY) / state.zoom;
+            return { x, y };
+        }
+
+        function canInteract() {
+            if (state.sessionPhase === 'open') return true;
+            if (state.sessionPhase === 'sections' && state.inPrivateSection) return true;
+            return false;
+        }
+
+        function handleMouseDown(e) {
+            const coords = getCanvasCoordinates(e);
+            
+            if (state.currentTool === 'pan') {
+                state.isPanning = true;
+                state.panStartX = e.clientX - state.panX;
+                state.panStartY = e.clientY - state.panY;
+            } else if (state.currentTool === 'draw' && canInteract()) {
+                state.isDrawing = true;
+                state.currentDrawing = {
+                    id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    number: state.yourNumber,
+                    color: '#4a9eff',
+                    width: 3,
+                    paths: [{ x: coords.x, y: coords.y }]
+                };
+                state.drawings.push(state.currentDrawing);
+                
+                sendWebSocketMessage({
+                    type: 'draw',
+                    color: '#4a9eff',
+                    width: 3,
+                    paths: [{ x: coords.x, y: coords.y }]
+                });
+            } else if (state.currentTool === 'eraser' && canInteract()) {
+                state.isErasing = true;
+                eraseAt(coords.x, coords.y);
+            } else if (state.currentTool === 'text' && canInteract()) {
+                showTextInput(coords.x, coords.y);
+            }
+        }
+
+        function handleMouseMove(e) {
+            const coords = getCanvasCoordinates(e);
+
+            if (state.currentTool === 'pan' && state.isPanning) {
+                state.panX = e.clientX - state.panStartX;
+                state.panY = e.clientY - state.panStartY;
+                redrawCanvas();
+            } else if (state.currentTool === 'draw' && state.isDrawing && state.currentDrawing) {
+                state.currentDrawing.paths.push({ x: coords.x, y: coords.y });
+                
+                sendWebSocketMessage({
+                    type: 'draw_update',
+                    paths: [{ x: coords.x, y: coords.y }]
+                });
+                
+                redrawCanvas();
+            } else if (state.currentTool === 'eraser' && state.isErasing && canInteract()) {
+                eraseAt(coords.x, coords.y);
+            }
+        }
+
+        function handleMouseUp(e) {
+            state.isDrawing = false;
+            state.isPanning = false;
+            state.isErasing = false;
+            state.currentDrawing = null;
+        }
+
+        function handleWheel(e) {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? 0.9 : 1.1;
+            const newZoom = Math.max(0.2, Math.min(5, state.zoom * delta));
+            
+            const rect = state.canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            const worldX = (mouseX - state.panX) / state.zoom;
+            const worldY = (mouseY - state.panY) / state.zoom;
+            
+            state.zoom = newZoom;
+            state.panX = mouseX - worldX * state.zoom;
+            state.panY = mouseY - worldY * state.zoom;
+            
+            redrawCanvas();
+        }
+
+        function showTextInput(x, y) {
+            const container = document.getElementById('text-input-container');
+            const input = document.getElementById('text-input');
+            
+            const worldX = x * state.zoom + state.panX;
+            const worldY = y * state.zoom + state.panY;
+            
+            container.style.left = worldX + 'px';
+            container.style.top = worldY + 'px';
+            container.style.display = 'block';
+            input.value = '';
+            input.focus();
+            
+            container.dataset.x = x;
+            container.dataset.y = y;
+        }
+
+        function hideTextInput() {
+            document.getElementById('text-input-container').style.display = 'none';
+        }
+
+        function addTextElement() {
+            const input = document.getElementById('text-input');
+            const container = document.getElementById('text-input-container');
+            const text = input.value.trim();
+            
+            if (text && canInteract()) {
+                const x = parseFloat(container.dataset.x);
+                const y = parseFloat(container.dataset.y);
+                
+                sendWebSocketMessage({
+                    type: 'text',
+                    content: text,
+                    x: x,
+                    y: y,
+                    color: '#e0e0e0',
+                    size: 20
+                });
+            }
+            
+            hideTextInput();
+        }
+
+        function eraseAt(x, y) {
+            if (!canInteract()) return;
+            
+            const eraseRadius = 30 / state.zoom;
+            
+            sendWebSocketMessage({
+                type: 'erase',
+                x: x,
+                y: y,
+                radius: eraseRadius
+            });
+        }
+
+        function addActionHistory(pseudonym, action) {
+            const history = document.getElementById('action-history');
+            const item = document.createElement('div');
+            item.className = `action-item ${action.includes('erased') ? 'erase' : 'create'}`;
+            item.textContent = `${pseudonym} ${action}`;
+            history.insertBefore(item, history.firstChild);
+            
+            while (history.children.length > 5) {
+                history.removeChild(history.lastChild);
+            }
+            
+            setTimeout(() => {
+                if (item.parentNode) {
+                    item.style.opacity = '0';
+                    item.style.transition = 'opacity 0.3s';
+                    setTimeout(() => item.remove(), 300);
+                }
+            }, 5000);
+        }
+
+        function updateParticipantList() {
+            const container = document.getElementById('participants');
+            container.innerHTML = '';
+            document.getElementById('participant-count').textContent = 
+                `${state.participants.length}/${state.maxParticipants} participants`;
+
+            state.participants.forEach(participant => {
+                if (participant.id === state.participantId) return;
+                
+                const item = document.createElement('div');
+                item.className = 'participant-item';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'participant-name';
+                nameSpan.textContent = `#${participant.number}`;
+                item.appendChild(nameSpan);
+                
+                if (state.votingActive) {
+                    const voteContainer = document.createElement('div');
+                    const voteBtn = document.createElement('button');
+                    voteBtn.className = 'vote-btn';
+                    voteBtn.textContent = state.userVotes[participant.id] ? 'Voted' : 'Vote';
+                    if (state.userVotes[participant.id]) {
+                        voteBtn.classList.add('voted');
+                    }
+                    voteBtn.onclick = () => voteToRemove(participant.id);
+                    
+                    const voteCount = document.createElement('span');
+                    voteCount.className = 'vote-count';
+                    voteCount.textContent = `(${state.votes[participant.id] || 0})`;
+                    
+                    voteContainer.appendChild(voteBtn);
+                    voteContainer.appendChild(voteCount);
+                    item.appendChild(voteContainer);
+                }
+                
+                container.appendChild(item);
+            });
+        }
+
+        function voteToRemove(participantId) {
+            if (!state.votingActive || state.userVotes[participantId]) return;
+            
+            state.userVotes[participantId] = true;
+            
+            sendWebSocketMessage({
+                type: 'vote_remove',
+                targetId: participantId
+            });
+            
+            updateParticipantList();
+        }
+
+        function startSessionTimer() {
+            setInterval(() => {
+                const elapsed = Date.now() - state.sessionStartTime;
+                const minutes = Math.floor(elapsed / 60000);
+                const seconds = Math.floor((elapsed % 60000) / 1000);
+                document.getElementById('session-timer').textContent = 
+                    `${minutes}:${String(seconds).padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function showVotingInterface() {
+            const modal = document.getElementById('continuation-modal');
+            const content = modal.querySelector('.modal-content');
+            content.innerHTML = `
+                <div class="modal-title">Voting Phase (Round ${state.votingRound})</div>
+                <div class="modal-text">Vote for participants who should be removed. Each participant receiving 4+ votes will be removed.</div>
+                <div class="modal-actions">
+                    <button class="modal-btn" id="close-voting-btn">Continue</button>
+                </div>
+            `;
+            document.getElementById('close-voting-btn').addEventListener('click', () => {
+                modal.classList.remove('visible');
+            });
+            modal.classList.add('visible');
+            document.getElementById('participant-list').classList.add('visible');
+        }
+
+        function hideVotingInterface() {
+            document.getElementById('continuation-modal').classList.remove('visible');
+        }
+
+        function showSectionsInterface(remainingNumbers) {
+            const modal = document.getElementById('continuation-modal');
+            const content = modal.querySelector('.modal-content');
+            
+            content.innerHTML = `
+                <div class="modal-title">Sections Phase</div>
+                <div class="modal-text">Remaining participants: ${remainingNumbers ? remainingNumbers.join(', ') : ''}</div>
+                <div class="modal-text">You can now form private sections (max 3 participants).</div>
+                <div class="modal-actions">
+                    <button class="modal-btn" id="close-sections-btn">Close</button>
+                </div>
+            `;
+            document.getElementById('close-sections-btn').addEventListener('click', () => {
+                modal.classList.remove('visible');
+            });
+            modal.classList.add('visible');
+        }
+
+        function updateSectionsList() {
+            // Update sections UI if needed
+        }
+
+        function showSectionInvitation(data) {
+            if (confirm(`Participant #${data.inviterNumber} invites you to join a private section. Accept?`)) {
+                sendWebSocketMessage({
+                    type: 'accept_section_invitation',
+                    sectionId: data.sectionId
+                });
+            }
+        }
+
+        function updateUIForSection() {
+            if (state.sessionPhase === 'sections' && !state.inPrivateSection) {
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    if (btn.dataset.tool !== 'pan') {
+                        btn.disabled = true;
+                    }
+                });
+            } else {
+                document.querySelectorAll('.tool-btn').forEach(btn => {
+                    btn.disabled = false;
+                });
+            }
+        }
+
+        window.addEventListener('load', init);
+        window.addEventListener('beforeunload', () => {
+            if (state.ws) {
+                state.ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
