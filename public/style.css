@@ -43,12 +43,14 @@ body {
 .modal-content h2 {
     margin-bottom: 1rem;
     color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 .modal-content p {
     margin-bottom: 1rem;
     line-height: 1.6;
     color: #ccc;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 .modal-buttons {
@@ -67,6 +69,7 @@ button {
     cursor: pointer;
     font-size: 1rem;
     transition: background-color 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 button:hover {
@@ -114,12 +117,14 @@ button:disabled {
 #participantInfo {
     font-weight: 600;
     color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 #roomInfo {
     display: flex;
     gap: 2rem;
     color: #aaa;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 #controls {
@@ -185,6 +190,7 @@ button:disabled {
     cursor: pointer;
     text-align: center;
     transition: all 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 .voting-participant:hover {
@@ -220,6 +226,7 @@ button:disabled {
     cursor: pointer;
     text-align: center;
     transition: all 0.2s;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 .available-participant:hover {
@@ -252,7 +259,7 @@ button:disabled {
     padding: 0.5rem;
     color: #fff;
     font-size: 16px;
-    font-family: inherit;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     min-width: 200px;
     outline: none;
     pointer-events: auto;
@@ -271,6 +278,7 @@ button:disabled {
     padding: 0.5rem 1rem;
     color: #fff;
     font-size: 0.9rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     z-index: 200;
     pointer-events: none;
     white-space: nowrap;
@@ -294,6 +302,7 @@ button:disabled {
     margin-top: 1.5rem;
     margin-bottom: 0.5rem;
     font-size: 1.1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 .instructions-text h3:first-child {
@@ -304,6 +313,7 @@ button:disabled {
     margin-bottom: 1rem;
     line-height: 1.6;
     color: #ccc;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 .instructions-text p:last-child {
@@ -314,6 +324,11 @@ button:disabled {
     font-size: 1.2rem;
     padding: 0.5rem 0.75rem;
     min-width: 40px;
+}
+
+#aboutBtn {
+    font-size: 0.9rem;
+    padding: 0.5rem 1rem;
 }
 
 /* Mobile Responsiveness */
@@ -359,17 +374,24 @@ button:disabled {
         max-width: 95%;
     }
     
-    .instructions-content {
+    .instructions-content,
+    .about-content {
         max-width: 95%;
         padding: 1rem;
     }
     
-    .instructions-text h3 {
+    .instructions-text h3,
+    .about-text h3 {
         font-size: 1rem;
     }
     
-    .instructions-text p {
+    .instructions-text p,
+    .about-text p {
         font-size: 0.9rem;
+    }
+    
+    #creatorImage {
+        max-width: 150px;
     }
     
     #textInput {
@@ -406,9 +428,77 @@ button:disabled {
         padding: 1rem;
     }
     
-    .instructions-text {
+    .instructions-text,
+    .about-text {
         margin: 1rem 0;
     }
+}
+
+/* About Modal */
+.about-content {
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+    text-align: left;
+}
+
+.about-text {
+    margin: 1.5rem 0;
+}
+
+.about-text p {
+    margin-bottom: 1rem;
+    line-height: 1.6;
+    color: #ccc;
+    font-size: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.about-text p:last-child {
+    margin-bottom: 0;
+}
+
+.about-text a {
+    color: #3d7a37;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.about-text a:hover {
+    color: #5a9f53;
+    text-decoration: underline;
+}
+
+.about-text strong {
+    color: #fff;
+    font-weight: 600;
+}
+
+.creator-image-container {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+#creatorImage {
+    max-width: 200px;
+    width: 100%;
+    height: auto;
+    border-radius: 8px;
+    border: 2px solid #333;
+    margin-bottom: 0.5rem;
+}
+
+.creator-label {
+    font-size: 0.9rem;
+    color: #aaa;
+    font-style: italic;
+    margin-top: 0.5rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+/* Ensure all text uses consistent font */
+h1, h2, h3, h4, h5, h6, p, span, div, button, input, textarea, a, label {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
 /* Touch improvements */

@@ -19,6 +19,10 @@ let currentPrivateSection = null;
 let currentPathId = null;
 let lastEraseTime = 0;
 const ERASE_THROTTLE = 50; // ms between erase server calls
+let lastTouchDistance = null;
+let initialScale = 1;
+let initialPanX = 0;
+let initialPanY = 0;
 
 // Initialize canvas
 function initCanvas() {
@@ -43,8 +47,8 @@ function initCanvas() {
     canvas.addEventListener('mouseleave', handleMouseUp);
     
     // Touch events
-    canvas.addEventListener('touchstart', handleTouchStart);
-    canvas.addEventListener('touchmove', handleTouchMove);
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
     canvas.addEventListener('touchend', handleTouchEnd);
     
     // Zoom with mouse wheel
@@ -237,10 +241,10 @@ function showAuthorInfo(x, y) {
             authorInfo.style.left = screenX + 'px';
             authorInfo.style.top = (screenY - infoHeight) + 'px';
             
-            // Hide after 3 seconds
+            // Hide after 5 seconds (longer for voting purposes)
             setTimeout(() => {
                 authorInfo.style.display = 'none';
-            }, 3000);
+            }, 5000);
         }
     }
 }
@@ -253,18 +257,48 @@ function handleMouseMove(e) {
         const path = drawingPaths.get(currentPathId);
         if (path) {
             path.points.push({ x: coords.x, y: coords.y });
+            
+            // Draw smooth curve using quadratic curves
+            if (path.points.length >= 2) {
+                ctx.save();
+                ctx.scale(scale, scale);
+                ctx.translate(panX, panY);
+                
+                ctx.beginPath();
+                const points = path.points;
+                
+                if (points.length === 2) {
+                    // First two points - just draw a line
+                    ctx.moveTo(points[0].x, points[0].y);
+                    ctx.lineTo(points[1].x, points[1].y);
+                } else {
+                    // Use quadratic curves for smooth lines
+                    ctx.moveTo(points[0].x, points[0].y);
+                    
+                    for (let i = 1; i < points.length - 1; i++) {
+                        const xc = (points[i].x + points[i + 1].x) / 2;
+                        const yc = (points[i].y + points[i + 1].y) / 2;
+                        ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+                    }
+                    
+                    // Connect to the last point
+                    const lastIndex = points.length - 1;
+                    ctx.quadraticCurveTo(
+                        points[lastIndex - 1].x, 
+                        points[lastIndex - 1].y,
+                        points[lastIndex].x, 
+                        points[lastIndex].y
+                    );
+                }
+                
+                ctx.strokeStyle = '#e0e0e0';
+                ctx.lineWidth = 2 / scale;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.stroke();
+                ctx.restore();
+            }
         }
-        
-        ctx.save();
-        ctx.scale(scale, scale);
-        ctx.translate(panX, panY);
-        ctx.lineTo(coords.x, coords.y);
-        ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 2 / scale; // Adjust line width for zoom
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.stroke();
-        ctx.restore();
         
         // Send to server
         socket.emit('canvasAction', {
@@ -305,23 +339,51 @@ function handleMouseUp(e) {
 }
 
 function handleTouchStart(e) {
-    // Don't prevent default if it's a single touch (allow scrolling/zooming)
     if (e.touches.length === 1) {
+        // Single touch - handle drawing/panning
         const touch = e.touches[0];
         const mouseEvent = new MouseEvent('mousedown', {
             clientX: touch.clientX,
             clientY: touch.clientY,
             bubbles: true,
-            cancelable: true
+            cancelable: true,
+            button: 0
         });
         canvas.dispatchEvent(mouseEvent);
+        
         // Only prevent default for drawing/erasing/text modes
         if (mode === 'draw' || mode === 'erase' || mode === 'text') {
             e.preventDefault();
         }
     } else if (e.touches.length === 2) {
-        // Two-finger touch for pinch zoom - allow default behavior
-        // We'll handle this separately if needed
+        // Two-finger touch for pinch zoom
+        e.preventDefault();
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        
+        lastTouchDistance = Math.hypot(
+            touch2.clientX - touch1.clientX,
+            touch2.clientY - touch1.clientY
+        );
+        
+        // Store initial transform state
+        initialScale = scale;
+        initialPanX = panX;
+        initialPanY = panY;
+        
+        // Calculate center point of pinch
+        const rect = canvas.getBoundingClientRect();
+        const centerX = (touch1.clientX + touch2.clientX) / 2 - rect.left;
+        const centerY = (touch1.clientY + touch2.clientY) / 2 - rect.top;
+        
+        // Convert to canvas coordinates
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const worldX = (centerX * scaleX - panX * scale) / scale;
+        const worldY = (centerY * scaleY - panY * scale) / scale;
+        
+        // Store for zoom calculation
+        canvas._pinchCenter = { worldX, worldY, screenX: centerX, screenY: centerY };
     }
 }
 
@@ -336,6 +398,32 @@ function handleTouchMove(e) {
             cancelable: true
         });
         canvas.dispatchEvent(mouseEvent);
+    } else if (e.touches.length === 2) {
+        // Handle pinch zoom
+        e.preventDefault();
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        
+        const currentDistance = Math.hypot(
+            touch2.clientX - touch1.clientX,
+            touch2.clientY - touch1.clientY
+        );
+        
+        if (lastTouchDistance && canvas._pinchCenter) {
+            const zoomFactor = currentDistance / lastTouchDistance;
+            const newScale = initialScale * zoomFactor;
+            scale = Math.max(0.1, Math.min(5, newScale));
+            
+            // Adjust pan to zoom towards pinch center
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            panX = (canvas._pinchCenter.screenX * scaleX) / scale - canvas._pinchCenter.worldX;
+            panY = (canvas._pinchCenter.screenY * scaleY) / scale - canvas._pinchCenter.worldY;
+            
+            redrawCanvas();
+        }
     }
 }
 
@@ -346,6 +434,12 @@ function handleTouchEnd(e) {
             cancelable: true
         });
         canvas.dispatchEvent(mouseEvent);
+        lastTouchDistance = null;
+        canvas._pinchCenter = null;
+    } else if (e.touches.length === 1) {
+        // Switched from 2 fingers to 1 - reset
+        lastTouchDistance = null;
+        canvas._pinchCenter = null;
     }
 }
 
@@ -501,19 +595,45 @@ function redrawCanvas() {
             
             if (points && points.length > 0) {
                 ctx.beginPath();
-                ctx.moveTo(points[0].x, points[0].y);
-                for (let i = 1; i < points.length; i++) {
-                    ctx.lineTo(points[i].x, points[i].y);
+                
+                if (points.length === 1) {
+                    // Single point - draw a small circle
+                    ctx.arc(points[0].x, points[0].y, 1 / scale, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Draw smooth curves
+                    ctx.moveTo(points[0].x, points[0].y);
+                    
+                    if (points.length === 2) {
+                        ctx.lineTo(points[1].x, points[1].y);
+                    } else {
+                        // Use quadratic curves for smooth lines
+                        for (let i = 1; i < points.length - 1; i++) {
+                            const xc = (points[i].x + points[i + 1].x) / 2;
+                            const yc = (points[i].y + points[i + 1].y) / 2;
+                            ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+                        }
+                        
+                        // Connect to the last point
+                        const lastIndex = points.length - 1;
+                        ctx.quadraticCurveTo(
+                            points[lastIndex - 1].x, 
+                            points[lastIndex - 1].y,
+                            points[lastIndex].x, 
+                            points[lastIndex].y
+                        );
+                    }
                 }
+                
                 ctx.strokeStyle = '#e0e0e0';
-                ctx.lineWidth = 2 / scale; // Adjust for zoom
+                ctx.lineWidth = 2 / scale;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 ctx.stroke();
             }
         } else if (item.type === 'text') {
             ctx.fillStyle = '#e0e0e0';
-            ctx.font = `${(item.fontSize || 16) / scale}px sans-serif`; // Adjust font size for zoom
+            ctx.font = `${(item.fontSize || 16) / scale}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif`;
             ctx.fillText(item.text, item.x, item.y);
         }
     });
@@ -735,6 +855,22 @@ document.getElementById('instructionsModal').addEventListener('click', (e) => {
     }
 });
 
+// About button
+document.getElementById('aboutBtn').addEventListener('click', () => {
+    document.getElementById('aboutModal').classList.add('show');
+});
+
+document.getElementById('closeAbout').addEventListener('click', () => {
+    document.getElementById('aboutModal').classList.remove('show');
+});
+
+// Close about modal when clicking outside
+document.getElementById('aboutModal').addEventListener('click', (e) => {
+    if (e.target.id === 'aboutModal') {
+        document.getElementById('aboutModal').classList.remove('show');
+    }
+});
+
 // Add click handler for viewing author info
 // Use a separate event listener that checks if we're not actively drawing/erasing
 let authorInfoTimeout = null;
@@ -758,7 +894,22 @@ canvas.addEventListener('click', (e) => {
             const coords = getCanvasCoordinates(e);
             showAuthorInfo(coords.x, coords.y);
         }
-    }, 150);
+    }, 100);
+});
+
+// Add touch handler for author info on mobile
+canvas.addEventListener('touchend', (e) => {
+    if (e.touches.length === 0 && mode !== 'erase' && mode !== 'text' && !isDrawing) {
+        const touch = e.changedTouches[0];
+        const rect = canvas.getBoundingClientRect();
+        const mouseEvent = new MouseEvent('click', {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            bubbles: true,
+            cancelable: true
+        });
+        canvas.dispatchEvent(mouseEvent);
+    }
 });
 
 function updateModeButtons() {
@@ -916,4 +1067,3 @@ if (document.readyState === 'loading') {
     // DOM already loaded
     setTimeout(initCanvas, 0);
 }
-
