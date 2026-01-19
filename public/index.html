@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interaction Atlas</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Age Verification Modal -->
+    <div id="ageModal" class="modal">
+        <div class="modal-content">
+            <h2>Age Verification</h2>
+            <p>This platform is restricted to users 18 years of age or older.</p>
+            <p>Are you 18 years of age or older?</p>
+            <div class="modal-buttons">
+                <button id="ageYes">Yes, I am 18 or older</button>
+                <button id="ageNo">No, I am under 18</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Modal -->
+    <div id="joinModal" class="modal">
+        <div class="modal-content">
+            <h2>Joining Interaction Atlas</h2>
+            <p id="joinStatus">Connecting...</p>
+        </div>
+    </div>
+
+    <!-- Voting Modal -->
+    <div id="votingModal" class="modal">
+        <div class="modal-content">
+            <h2>Voting Round <span id="votingRoundNumber">1</span></h2>
+            <p>Vote for participants you believe do not fit the group.</p>
+            <p>Participants with 4 or more votes will be removed.</p>
+            <div id="votingParticipants"></div>
+            <button id="submitVote" disabled>Submit Vote</button>
+        </div>
+    </div>
+
+    <!-- Voting Complete Modal -->
+    <div id="votingCompleteModal" class="modal">
+        <div class="modal-content">
+            <h2>Voting Complete</h2>
+            <p>Remaining participants: <span id="remainingParticipants"></span></p>
+            <p>You can now create private sections with up to 2 other participants.</p>
+            <button id="closeVotingComplete">Continue</button>
+        </div>
+    </div>
+
+    <!-- Room Closed Modal -->
+    <div id="roomClosedModal" class="modal">
+        <div class="modal-content">
+            <h2>Room Closed</h2>
+            <p>The room session has ended. Thank you for participating.</p>
+        </div>
+    </div>
+
+    <!-- Main Interface -->
+    <div id="mainInterface" style="display: none;">
+        <!-- Top Bar -->
+        <div id="topBar">
+            <div id="participantInfo">
+                <span>You are Participant #<span id="participantNumber">-</span></span>
+            </div>
+            <div id="roomInfo">
+                <span>Participants: <span id="participantCount">0</span>/20</span>
+                <span id="roomTimer">00:00</span>
+            </div>
+            <div id="controls">
+                <button id="createSectionBtn" style="display: none;">Create Private Section</button>
+                <button id="drawMode">Draw</button>
+                <button id="textMode">Text</button>
+                <button id="eraseMode">Erase</button>
+            </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div id="canvasContainer">
+            <canvas id="canvas"></canvas>
+            <div id="textInputOverlay">
+                <input type="text" id="textInput" placeholder="Type and press Enter">
+            </div>
+        </div>
+
+        <!-- Create Section Modal -->
+        <div id="createSectionModal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <h2>Create Private Section</h2>
+                <p>Select up to 2 participants to invite:</p>
+                <div id="availableParticipants"></div>
+                <div class="modal-buttons">
+                    <button id="confirmSection">Create Section</button>
+                    <button id="cancelSection">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
