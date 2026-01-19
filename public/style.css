@@ -262,3 +262,167 @@ button:disabled {
     border-color: #3d7a37;
 }
 
+/* Author Info Display */
+#authorInfo {
+    position: absolute;
+    background: rgba(26, 26, 26, 0.95);
+    border: 2px solid #3d7a37;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    color: #fff;
+    font-size: 0.9rem;
+    z-index: 200;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Instructions Modal */
+.instructions-content {
+    max-width: 700px;
+    max-height: 90vh;
+    overflow-y: auto;
+    text-align: left;
+}
+
+.instructions-text {
+    margin: 1.5rem 0;
+}
+
+.instructions-text h3 {
+    color: #fff;
+    margin-top: 1.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+}
+
+.instructions-text h3:first-child {
+    margin-top: 0;
+}
+
+.instructions-text p {
+    margin-bottom: 1rem;
+    line-height: 1.6;
+    color: #ccc;
+}
+
+.instructions-text p:last-child {
+    margin-bottom: 0;
+}
+
+#instructionsBtn {
+    font-size: 1.2rem;
+    padding: 0.5rem 0.75rem;
+    min-width: 40px;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    #topBar {
+        flex-wrap: wrap;
+        padding: 0.75rem;
+    }
+    
+    #participantInfo {
+        font-size: 0.9rem;
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    #roomInfo {
+        font-size: 0.85rem;
+        gap: 1rem;
+        flex: 1;
+    }
+    
+    #controls {
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+    
+    #controls button {
+        padding: 0.4rem 0.75rem;
+        font-size: 0.85rem;
+        flex: 1;
+        min-width: calc(25% - 0.25rem);
+    }
+    
+    #createSectionBtn {
+        width: 100%;
+        margin-top: 0.5rem;
+    }
+    
+    .modal-content {
+        padding: 1.5rem;
+        max-width: 95%;
+    }
+    
+    .instructions-content {
+        max-width: 95%;
+        padding: 1rem;
+    }
+    
+    .instructions-text h3 {
+        font-size: 1rem;
+    }
+    
+    .instructions-text p {
+        font-size: 0.9rem;
+    }
+    
+    #textInput {
+        min-width: 150px;
+        font-size: 14px;
+    }
+    
+    #authorInfo {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.75rem;
+    }
+    
+    #canvasContainer {
+        min-height: 300px;
+    }
+}
+
+@media (max-width: 480px) {
+    #topBar {
+        padding: 0.5rem;
+    }
+    
+    #controls button {
+        font-size: 0.75rem;
+        padding: 0.35rem 0.5rem;
+    }
+    
+    #instructionsBtn {
+        font-size: 1rem;
+        padding: 0.35rem 0.5rem;
+    }
+    
+    .modal-content {
+        padding: 1rem;
+    }
+    
+    .instructions-text {
+        margin: 1rem 0;
+    }
+}
+
+/* Touch improvements */
+@media (hover: none) and (pointer: coarse) {
+    button {
+        min-height: 44px; /* Better touch target */
+    }
+    
+    #controls button {
+        min-height: 40px;
+    }
+    
+    .voting-participant,
+    .available-participant {
+        min-height: 44px;
+    }
+}

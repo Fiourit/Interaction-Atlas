@@ -17,6 +17,8 @@ let availableParticipants = [];
 let selectedForSection = new Set();
 let currentPrivateSection = null;
 let currentPathId = null;
+let lastEraseTime = 0;
+const ERASE_THROTTLE = 50; // ms between erase server calls
 
 // Initialize canvas
 function initCanvas() {
@@ -75,7 +77,8 @@ function initCanvas() {
     
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-        if (e.code === 'Space') {
+        // Only prevent spacebar if not typing in text input
+        if (e.code === 'Space' && document.activeElement !== document.getElementById('textInput')) {
             spaceKeyPressed = true;
             e.preventDefault();
         }
@@ -127,6 +130,7 @@ function handleMouseDown(e) {
     
     const coords = getCanvasCoordinates(e);
     
+    
     if (mode === 'draw') {
         isDrawing = true;
         currentPathId = `${socket.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -152,7 +156,92 @@ function handleMouseDown(e) {
     } else if (mode === 'text') {
         showTextInput(coords.x, coords.y);
     } else if (mode === 'erase') {
+        isDrawing = true; // Track erasing as drawing-like action
         eraseAt(coords.x, coords.y);
+    }
+}
+
+// Add a new mode for viewing author info
+let viewMode = false;
+
+function showAuthorInfo(x, y) {
+    const clickRadius = 30; // pixels
+    let foundItem = null;
+    
+    // Check text items first (they're point-based)
+    for (const item of canvasData) {
+        if (item.type === 'text') {
+            const distance = Math.sqrt(Math.pow(item.x - x, 2) + Math.pow(item.y - y, 2));
+            if (distance < clickRadius) {
+                foundItem = item;
+                break;
+            }
+        } else if (item.type === 'draw' && item.pathId) {
+            // Check if click is near any point in the path
+            let points = null;
+            const path = drawingPaths.get(item.pathId);
+            if (path && path.points.length > 0) {
+                points = path.points;
+            } else if (item.pathPoints && item.pathPoints.length > 0) {
+                points = item.pathPoints;
+            }
+            
+            if (points) {
+                for (let i = 0; i < points.length; i++) {
+                    const distance = Math.sqrt(Math.pow(points[i].x - x, 2) + Math.pow(points[i].y - y, 2));
+                    if (distance < clickRadius) {
+                        foundItem = item;
+                        break;
+                    }
+                }
+            }
+        }
+        if (foundItem) break;
+    }
+    
+    if (foundItem && foundItem.participantNumber) {
+        const authorInfo = document.getElementById('authorInfo');
+        if (authorInfo) {
+            authorInfo.textContent = `Author: Participant #${foundItem.participantNumber}`;
+            authorInfo.style.display = 'block';
+            
+            // Position near click
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let screenX = (x * scale + panX * scale) * (rect.width / canvas.width) + rect.left;
+            let screenY = (y * scale + panY * scale) * (rect.height / canvas.height) + rect.top;
+            
+            // Get author info dimensions (approximate)
+            authorInfo.style.visibility = 'hidden';
+            authorInfo.style.display = 'block';
+            const infoWidth = authorInfo.offsetWidth || 200;
+            const infoHeight = authorInfo.offsetHeight || 30;
+            authorInfo.style.visibility = 'visible';
+            
+            // Keep within bounds
+            const padding = 10;
+            if (screenX + infoWidth > window.innerWidth - padding) {
+                screenX = window.innerWidth - infoWidth - padding;
+            }
+            if (screenX < padding) {
+                screenX = padding;
+            }
+            if (screenY - infoHeight < padding) {
+                screenY = screenY + 40; // Show below instead
+            }
+            if (screenY + infoHeight > window.innerHeight - padding) {
+                screenY = window.innerHeight - infoHeight - padding;
+            }
+            
+            authorInfo.style.left = screenX + 'px';
+            authorInfo.style.top = (screenY - infoHeight) + 'px';
+            
+            // Hide after 3 seconds
+            setTimeout(() => {
+                authorInfo.style.display = 'none';
+            }, 3000);
+        }
     }
 }
 
@@ -185,6 +274,10 @@ function handleMouseMove(e) {
             y: coords.y,
             action: 'move'
         });
+    } else if (mode === 'erase' && isDrawing) {
+        // Allow erasing while dragging
+        const coords = getCanvasCoordinates(e);
+        eraseAt(coords.x, coords.y);
     }
 }
 
@@ -206,33 +299,54 @@ function handleMouseUp(e) {
         });
         
         currentPathId = null;
+    } else if (mode === 'erase' && isDrawing) {
+        isDrawing = false;
     }
 }
 
 function handleTouchStart(e) {
-    e.preventDefault();
-    const touch = e.touches[0];
-    const mouseEvent = new MouseEvent('mousedown', {
-        clientX: touch.clientX,
-        clientY: touch.clientY
-    });
-    canvas.dispatchEvent(mouseEvent);
+    // Don't prevent default if it's a single touch (allow scrolling/zooming)
+    if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousedown', {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            bubbles: true,
+            cancelable: true
+        });
+        canvas.dispatchEvent(mouseEvent);
+        // Only prevent default for drawing/erasing/text modes
+        if (mode === 'draw' || mode === 'erase' || mode === 'text') {
+            e.preventDefault();
+        }
+    } else if (e.touches.length === 2) {
+        // Two-finger touch for pinch zoom - allow default behavior
+        // We'll handle this separately if needed
+    }
 }
 
 function handleTouchMove(e) {
-    e.preventDefault();
-    const touch = e.touches[0];
-    const mouseEvent = new MouseEvent('mousemove', {
-        clientX: touch.clientX,
-        clientY: touch.clientY
-    });
-    canvas.dispatchEvent(mouseEvent);
+    if (e.touches.length === 1 && (mode === 'draw' || mode === 'erase' || mode === 'text')) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const mouseEvent = new MouseEvent('mousemove', {
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+            bubbles: true,
+            cancelable: true
+        });
+        canvas.dispatchEvent(mouseEvent);
+    }
 }
 
 function handleTouchEnd(e) {
-    e.preventDefault();
-    const mouseEvent = new MouseEvent('mouseup', {});
-    canvas.dispatchEvent(mouseEvent);
+    if (e.touches.length === 0) {
+        const mouseEvent = new MouseEvent('mouseup', {
+            bubbles: true,
+            cancelable: true
+        });
+        canvas.dispatchEvent(mouseEvent);
+    }
 }
 
 function handleWheel(e) {
@@ -291,6 +405,10 @@ function showTextInput(x, y) {
         } else if (e.key === 'Escape') {
             overlay.style.display = 'none';
         }
+        // Allow spacebar to work normally in text input
+        if (e.code === 'Space') {
+            e.stopPropagation();
+        }
     };
 }
 
@@ -307,7 +425,58 @@ function submitText(x, y, text) {
 }
 
 function eraseAt(x, y) {
-    socket.emit('erase', { x, y });
+    // Check for nearby elements locally first
+    const eraseRadius = 20; // pixels
+    const itemsToErase = [];
+    
+    canvasData.forEach((item, index) => {
+        if (item.type === 'text') {
+            // For text, check if eraser is near the text position
+            const distance = Math.sqrt(Math.pow(item.x - x, 2) + Math.pow(item.y - y, 2));
+            if (distance < eraseRadius) {
+                itemsToErase.push(index);
+            }
+        } else if (item.type === 'draw' && item.pathId) {
+            // For paths, check if eraser is near any point in the path
+            let points = null;
+            const path = drawingPaths.get(item.pathId);
+            if (path && path.points.length > 0) {
+                points = path.points;
+            } else if (item.pathPoints && item.pathPoints.length > 0) {
+                points = item.pathPoints;
+            }
+            
+            if (points) {
+                for (let i = 0; i < points.length; i++) {
+                    const distance = Math.sqrt(Math.pow(points[i].x - x, 2) + Math.pow(points[i].y - y, 2));
+                    if (distance < eraseRadius) {
+                        itemsToErase.push(index);
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    
+    // Remove items in reverse order to maintain indices
+    itemsToErase.reverse().forEach(index => {
+        const item = canvasData[index];
+        if (item.pathId) {
+            drawingPaths.delete(item.pathId);
+        }
+        canvasData.splice(index, 1);
+    });
+    
+    if (itemsToErase.length > 0) {
+        redrawCanvas();
+        
+        // Throttle server calls during dragging
+        const now = Date.now();
+        if (now - lastEraseTime > ERASE_THROTTLE) {
+            socket.emit('erase', { x, y, eraseRadius });
+            lastEraseTime = now;
+        }
+    }
 }
 
 function redrawCanvas() {
@@ -439,13 +608,45 @@ socket.on('canvasUpdate', (action) => {
 });
 
 socket.on('canvasErase', (data) => {
-    canvasData = canvasData.filter(item => {
-        if (item.x >= data.x - 10 && item.x <= data.x + 10 &&
-            item.y >= data.y - 10 && item.y <= data.y + 10) {
-            return false;
+    const eraseRadius = data.eraseRadius || 20;
+    const itemsToRemove = [];
+    
+    canvasData.forEach((item, index) => {
+        if (item.type === 'text') {
+            const distance = Math.sqrt(Math.pow(item.x - data.x, 2) + Math.pow(item.y - data.y, 2));
+            if (distance < eraseRadius) {
+                itemsToRemove.push(index);
+            }
+        } else if (item.type === 'draw' && item.pathId) {
+            let points = null;
+            const path = drawingPaths.get(item.pathId);
+            if (path && path.points.length > 0) {
+                points = path.points;
+            } else if (item.pathPoints && item.pathPoints.length > 0) {
+                points = item.pathPoints;
+            }
+            
+            if (points) {
+                for (let i = 0; i < points.length; i++) {
+                    const distance = Math.sqrt(Math.pow(points[i].x - data.x, 2) + Math.pow(points[i].y - data.y, 2));
+                    if (distance < eraseRadius) {
+                        itemsToRemove.push(index);
+                        break;
+                    }
+                }
+            }
         }
-        return true;
     });
+    
+    // Remove items in reverse order
+    itemsToRemove.reverse().forEach(index => {
+        const item = canvasData[index];
+        if (item.pathId) {
+            drawingPaths.delete(item.pathId);
+        }
+        canvasData.splice(index, 1);
+    });
+    
     redrawCanvas();
 });
 
@@ -516,6 +717,48 @@ document.getElementById('eraseMode').addEventListener('click', () => {
     mode = 'erase';
     canvas.className = 'erase-mode';
     updateModeButtons();
+});
+
+// Instructions button
+document.getElementById('instructionsBtn').addEventListener('click', () => {
+    document.getElementById('instructionsModal').classList.add('show');
+});
+
+document.getElementById('closeInstructions').addEventListener('click', () => {
+    document.getElementById('instructionsModal').classList.remove('show');
+});
+
+// Close instructions modal when clicking outside
+document.getElementById('instructionsModal').addEventListener('click', (e) => {
+    if (e.target.id === 'instructionsModal') {
+        document.getElementById('instructionsModal').classList.remove('show');
+    }
+});
+
+// Add click handler for viewing author info
+// Use a separate event listener that checks if we're not actively drawing/erasing
+let authorInfoTimeout = null;
+canvas.addEventListener('click', (e) => {
+    // Don't show author info if:
+    // 1. We're actively drawing
+    // 2. We're in erase mode (will erase instead)
+    // 3. We're in text mode (will show text input instead)
+    if (mode === 'erase' || mode === 'text' || isDrawing) {
+        return;
+    }
+    
+    // Small delay to allow any other handlers to process first
+    if (authorInfoTimeout) {
+        clearTimeout(authorInfoTimeout);
+    }
+    
+    authorInfoTimeout = setTimeout(() => {
+        // Double-check we're still not in an active mode
+        if (mode !== 'erase' && mode !== 'text' && !isDrawing) {
+            const coords = getCanvasCoordinates(e);
+            showAuthorInfo(coords.x, coords.y);
+        }
+    }, 150);
 });
 
 function updateModeButtons() {
