@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interaction Atlas</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Age Verification Modal -->
+    <div id="ageModal" class="modal show">
+        <div class="modal-content">
+            <h2>Age Verification</h2>
+            <p>This platform is restricted to users 18 years of age or older.</p>
+            <p>Are you 18 years of age or older?</p>
+            <div class="modal-buttons">
+                <button id="ageYes">Yes, I am 18 or older</button>
+                <button id="ageNo">No, I am under 18</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Join Modal -->
+    <div id="joinModal" class="modal">
+        <div class="modal-content">
+            <h2>Joining Interaction Atlas</h2>
+            <p id="joinStatus">Connecting...</p>
+        </div>
+    </div>
+
+    <!-- Voting Modal -->
+    <div id="votingModal" class="modal">
+        <div class="modal-content">
+            <h2>Voting Round <span id="votingRoundNumber">1</span></h2>
+            <p>Vote for participants you believe do not fit the group.</p>
+            <p>Participants with 4 or more votes will be removed.</p>
+            <div id="votingParticipants"></div>
+            <button id="submitVote" disabled>Submit Vote</button>
+        </div>
+    </div>
+
+    <!-- Voting Complete Modal -->
+    <div id="votingCompleteModal" class="modal">
+        <div class="modal-content">
+            <h2>Voting Complete</h2>
+            <p>Remaining participants: <span id="remainingParticipants"></span></p>
+            <p>You can now create private sections with up to 2 other participants.</p>
+            <button id="closeVotingComplete">Continue</button>
+        </div>
+    </div>
+
+    <!-- Room Closed Modal -->
+    <div id="roomClosedModal" class="modal">
+        <div class="modal-content">
+            <h2>Room Closed</h2>
+            <p>The room session has ended. Thank you for participating.</p>
+        </div>
+    </div>
+
+    <!-- Main Interface -->
+    <div id="mainInterface" style="display: none;">
+        <!-- Top Bar -->
+        <div id="topBar">
+            <div id="participantInfo">
+                <span>You are Participant #<span id="participantNumber">-</span></span>
+            </div>
+            <div id="roomInfo">
+                <span>Participants: <span id="participantCount">0</span>/20</span>
+                <span id="roomTimer">00:00</span>
+            </div>
+            <div id="controls">
+                <button id="createSectionBtn" style="display: none;">Create Private Section</button>
+                <button id="drawMode">Draw</button>
+                <button id="textMode">Text</button>
+                <button id="eraseMode">Erase</button>
+                <button id="instructionsBtn" title="Instructions">ℹ️</button>
+            </div>
+        </div>
+
+        <!-- Canvas Container -->
+        <div id="canvasContainer">
+            <canvas id="canvas"></canvas>
+            <div id="textInputOverlay">
+                <input type="text" id="textInput" placeholder="Type and press Enter">
+            </div>
+            <div id="authorInfo" style="display: none;"></div>
+        </div>
+
+        <!-- Instructions Modal -->
+        <div id="instructionsModal" class="modal">
+            <div class="modal-content instructions-content">
+                <h2>How to Use Interaction Atlas</h2>
+                <div class="instructions-text">
+                    <h3>Getting Started</h3>
+                    <p>Welcome to Interaction Atlas! This is a collaborative drawing and writing platform where you can create and interact with others.</p>
+                    
+                    <h3>Drawing Mode</h3>
+                    <p>Click the "Draw" button to start drawing. Click and drag on the canvas to create lines. Your drawings will be visible to all participants (or those in your private section).</p>
+                    
+                    <h3>Text Mode</h3>
+                    <p>Click the "Text" button, then click anywhere on the canvas to place text. Type your message and press Enter to submit. The spacebar works normally when typing.</p>
+                    
+                    <h3>Erase Mode</h3>
+                    <p>Click the "Erase" button, then click on any drawing or text to remove it. The eraser will detect elements within a 20-pixel radius.</p>
+                    
+                    <h3>Viewing Authors</h3>
+                    <p>Click on any drawing or text element to see who created it. The author information will appear briefly near the element.</p>
+                    
+                    <h3>Navigation</h3>
+                    <p>• Scroll with your mouse wheel to zoom in/out<br>
+                    • Hold Space and drag to pan around the canvas<br>
+                    • On mobile, pinch to zoom and drag with one finger to pan</p>
+                    
+                    <h3>Voting Rounds</h3>
+                    <p>At 20, 40, and 60 minutes, voting rounds will begin. Vote for participants you believe don't fit the group. Participants with 4 or more votes will be removed.</p>
+                    
+                    <h3>Private Sections</h3>
+                    <p>After the third voting round, you can create private sections with up to 2 other participants. Only members of your private section will see your drawings and text.</p>
+                    
+                    <h3>Mobile Usage</h3>
+                    <p>The platform is fully mobile-compatible. Use touch gestures to draw, zoom, and pan. Tap buttons to switch modes.</p>
+                </div>
+                <button id="closeInstructions">Close</button>
+            </div>
+        </div>
+
+        <!-- Create Section Modal -->
+        <div id="createSectionModal" class="modal">
+            <div class="modal-content">
+                <h2>Create Private Section</h2>
+                <p>Select up to 2 participants to invite:</p>
+                <div id="availableParticipants"></div>
+                <div class="modal-buttons">
+                    <button id="confirmSection">Create Section</button>
+                    <button id="cancelSection">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
+
