@@ -14,7 +14,7 @@ body {
 
 /* Modal Styles */
 .modal {
-    display: flex;
+    display: none; /* Hidden by default */
     position: fixed;
     z-index: 1000;
     left: 0;
@@ -24,6 +24,10 @@ body {
     background-color: rgba(0, 0, 0, 0.9);
     align-items: center;
     justify-content: center;
+}
+
+.modal.show {
+    display: flex; /* Show when .show class is added */
 }
 
 .modal-content {

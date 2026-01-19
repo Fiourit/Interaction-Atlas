@@ -304,7 +304,7 @@ socket.on('joined', (data) => {
     });
     
     document.getElementById('participantNumber').textContent = data.number;
-    document.getElementById('joinModal').style.display = 'none';
+    document.getElementById('joinModal').classList.remove('show');
     document.getElementById('mainInterface').style.display = 'flex';
     
     updateParticipantCount(data.roomState.participants.length);
@@ -402,7 +402,7 @@ socket.on('removed', (data) => {
 });
 
 socket.on('roomClosed', () => {
-    document.getElementById('roomClosedModal').style.display = 'flex';
+    document.getElementById('roomClosedModal').classList.add('show');
 });
 
 socket.on('privateSectionCreated', (data) => {
@@ -412,8 +412,8 @@ socket.on('privateSectionCreated', (data) => {
 
 // Age verification
 document.getElementById('ageYes').addEventListener('click', () => {
-    document.getElementById('ageModal').style.display = 'none';
-    document.getElementById('joinModal').style.display = 'flex';
+    document.getElementById('ageModal').classList.remove('show');
+    document.getElementById('joinModal').classList.add('show');
     socket.emit('join', { ageVerified: true });
 });
 
@@ -482,11 +482,11 @@ function showVotingModal(round) {
         }
     });
     
-    document.getElementById('votingModal').style.display = 'flex';
+    document.getElementById('votingModal').classList.add('show');
 }
 
 function hideVotingModal() {
-    document.getElementById('votingModal').style.display = 'none';
+    document.getElementById('votingModal').classList.remove('show');
 }
 
 document.getElementById('submitVote').addEventListener('click', () => {
@@ -497,11 +497,11 @@ document.getElementById('submitVote').addEventListener('click', () => {
 // Voting complete modal
 function showVotingCompleteModal(remaining) {
     document.getElementById('remainingParticipants').textContent = remaining.join(', ');
-    document.getElementById('votingCompleteModal').style.display = 'flex';
+    document.getElementById('votingCompleteModal').classList.add('show');
 }
 
 document.getElementById('closeVotingComplete').addEventListener('click', () => {
-    document.getElementById('votingCompleteModal').style.display = 'none';
+    document.getElementById('votingCompleteModal').classList.remove('show');
 });
 
 // Create private section
@@ -539,7 +539,7 @@ function showCreateSectionModal() {
         container.appendChild(div);
     });
     
-    document.getElementById('createSectionModal').style.display = 'flex';
+    document.getElementById('createSectionModal').classList.add('show');
 }
 
 document.getElementById('confirmSection').addEventListener('click', () => {
@@ -547,7 +547,7 @@ document.getElementById('confirmSection').addEventListener('click', () => {
         inviteeNumbers: Array.from(selectedForSection)
     }, (response) => {
         if (response.success) {
-            document.getElementById('createSectionModal').style.display = 'none';
+            document.getElementById('createSectionModal').classList.remove('show');
         } else {
             alert('Failed to create private section.');
         }
@@ -555,7 +555,7 @@ document.getElementById('confirmSection').addEventListener('click', () => {
 });
 
 document.getElementById('cancelSection').addEventListener('click', () => {
-    document.getElementById('createSectionModal').style.display = 'none';
+    document.getElementById('createSectionModal').classList.remove('show');
 });
 
 // Room timer
