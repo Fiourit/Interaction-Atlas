@@ -11,14 +11,14 @@ let lastPanY = 0;
 let isPanning = false;
 let spaceKeyPressed = false;
 let canvasData = [];
-let drawingPaths = new Map(); // pathId -> path data
+let drawingPaths = new Map();
 let selectedVotes = new Set();
 let availableParticipants = [];
 let selectedForSection = new Set();
 let currentPrivateSection = null;
 let currentPathId = null;
 let lastEraseTime = 0;
-const ERASE_THROTTLE = 50; // ms between erase server calls
+const ERASE_THROTTLE = 50;
 let lastTouchDistance = null;
 let initialScale = 1;
 let initialPanX = 0;
@@ -33,7 +33,6 @@ function initCanvas() {
     }
     ctx = canvas.getContext('2d');
     
-    // Set initial canvas style
     canvas.style.display = 'block';
     canvas.style.cursor = 'crosshair';
     
@@ -81,7 +80,6 @@ function initCanvas() {
     
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
-        // Only prevent spacebar if not typing in text input
         if (e.code === 'Space' && document.activeElement !== document.getElementById('textInput')) {
             spaceKeyPressed = true;
             e.preventDefault();
@@ -100,34 +98,33 @@ function resizeCanvas() {
     if (!container || !canvas) return;
     
     const width = container.clientWidth || window.innerWidth;
-    const height = container.clientHeight || window.innerHeight - 60; // Subtract top bar height
+    const height = container.clientHeight || window.innerHeight - 60;
     
     canvas.width = width;
     canvas.height = height;
-    
-    // Set canvas display size
     canvas.style.width = width + 'px';
     canvas.style.height = height + 'px';
     
     redrawCanvas();
 }
 
+// Convert screen coordinates to world coordinates
 function getCanvasCoordinates(e) {
     if (!canvas) return { x: 0, y: 0 };
+    
     const rect = canvas.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
     
-    // Get screen coordinates relative to canvas (in CSS pixels)
-    const screenX = e.clientX - rect.left;
-    const screenY = e.clientY - rect.top;
+    // Get position relative to canvas element
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
     
-    // Convert to canvas internal pixel coordinates
-    // (accounting for device pixel ratio and canvas size)
-    const canvasX = (screenX / rect.width) * canvas.width;
-    const canvasY = (screenY / rect.height) * canvas.height;
+    // Convert to canvas internal coordinates
+    const canvasX = (x / rect.width) * canvas.width;
+    const canvasY = (y / rect.height) * canvas.height;
     
-    // Convert to world coordinates
-    // Transform is: translate(panX, panY) then scale(scale, scale)
-    // So inverse is: divide by scale, then subtract pan
+    // Convert to world coordinates (inverse of transform: translate then scale)
     const worldX = (canvasX / scale) - panX;
     const worldY = (canvasY / scale) - panY;
     
@@ -136,9 +133,8 @@ function getCanvasCoordinates(e) {
 
 function handleMouseDown(e) {
     if (!canvas || !ctx) return;
-    if (e.button !== 0 && mode !== 'erase') return; // Only left click for draw/text
+    if (e.button !== 0 && mode !== 'erase') return;
     
-    // Prevent default for middle mouse button (pan)
     if (e.button === 1) {
         e.preventDefault();
         return;
@@ -150,14 +146,12 @@ function handleMouseDown(e) {
         isDrawing = true;
         currentPathId = `${socket.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Initialize path with first point
         const firstPoint = { x: coords.x, y: coords.y };
         drawingPaths.set(currentPathId, {
             points: [firstPoint],
             participantNumber: participantNumber
         });
         
-        // Add to canvasData immediately
         canvasData.push({
             type: 'draw',
             pathId: currentPathId,
@@ -165,7 +159,6 @@ function handleMouseDown(e) {
             participantNumber: participantNumber
         });
         
-        // Redraw to show the initial point
         redrawCanvas();
         
         socket.emit('canvasAction', {
@@ -183,90 +176,6 @@ function handleMouseDown(e) {
     }
 }
 
-// Add a new mode for viewing author info
-let viewMode = false;
-
-function showAuthorInfo(x, y) {
-    const clickRadius = 30; // pixels
-    let foundItem = null;
-    
-    // Check text items first (they're point-based)
-    for (const item of canvasData) {
-        if (item.type === 'text') {
-            const distance = Math.sqrt(Math.pow(item.x - x, 2) + Math.pow(item.y - y, 2));
-            if (distance < clickRadius) {
-                foundItem = item;
-                break;
-            }
-        } else if (item.type === 'draw' && item.pathId) {
-            // Check if click is near any point in the path
-            let points = null;
-            const path = drawingPaths.get(item.pathId);
-            if (path && path.points.length > 0) {
-                points = path.points;
-            } else if (item.pathPoints && item.pathPoints.length > 0) {
-                points = item.pathPoints;
-            }
-            
-            if (points) {
-                for (let i = 0; i < points.length; i++) {
-                    const distance = Math.sqrt(Math.pow(points[i].x - x, 2) + Math.pow(points[i].y - y, 2));
-                    if (distance < clickRadius) {
-                        foundItem = item;
-                        break;
-                    }
-                }
-            }
-        }
-        if (foundItem) break;
-    }
-    
-    if (foundItem && foundItem.participantNumber) {
-        const authorInfo = document.getElementById('authorInfo');
-        if (authorInfo) {
-            authorInfo.textContent = `Author: Participant #${foundItem.participantNumber}`;
-            authorInfo.style.display = 'block';
-            
-            // Position near click
-            const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            let screenX = (x * scale + panX * scale) * (rect.width / canvas.width) + rect.left;
-            let screenY = (y * scale + panY * scale) * (rect.height / canvas.height) + rect.top;
-            
-            // Get author info dimensions (approximate)
-            authorInfo.style.visibility = 'hidden';
-            authorInfo.style.display = 'block';
-            const infoWidth = authorInfo.offsetWidth || 200;
-            const infoHeight = authorInfo.offsetHeight || 30;
-            authorInfo.style.visibility = 'visible';
-            
-            // Keep within bounds
-            const padding = 10;
-            if (screenX + infoWidth > window.innerWidth - padding) {
-                screenX = window.innerWidth - infoWidth - padding;
-            }
-            if (screenX < padding) {
-                screenX = padding;
-            }
-            if (screenY - infoHeight < padding) {
-                screenY = screenY + 40; // Show below instead
-            }
-            if (screenY + infoHeight > window.innerHeight - padding) {
-                screenY = window.innerHeight - infoHeight - padding;
-            }
-            
-            authorInfo.style.left = screenX + 'px';
-            authorInfo.style.top = (screenY - infoHeight) + 'px';
-            
-            // Hide after 5 seconds (longer for voting purposes)
-            setTimeout(() => {
-                authorInfo.style.display = 'none';
-            }, 5000);
-        }
-    }
-}
-
 function handleMouseMove(e) {
     if (!canvas || !ctx) return;
     
@@ -275,28 +184,24 @@ function handleMouseMove(e) {
         const path = drawingPaths.get(currentPathId);
         
         if (path && path.points.length > 0) {
-            // Only add point if it's significantly different from the last point
             const lastPoint = path.points[path.points.length - 1];
             const dx = coords.x - lastPoint.x;
             const dy = coords.y - lastPoint.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+            const dist = Math.sqrt(dx * dx + dy * dy);
             
-            // Add point if moved at least 1 pixel (in world coordinates)
-            if (distance > 1 / scale) {
+            // Only add point if moved significantly
+            if (dist > 0.5) {
                 const newPoint = { x: coords.x, y: coords.y };
                 path.points.push(newPoint);
                 
-                // Update canvasData to keep it in sync
                 const canvasItem = canvasData.find(item => item.pathId === currentPathId);
                 if (canvasItem) {
                     if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
                     canvasItem.pathPoints.push(newPoint);
                 }
                 
-                // Redraw the entire canvas
                 redrawCanvas();
                 
-                // Send to server
                 socket.emit('canvasAction', {
                     type: 'draw',
                     pathId: currentPathId,
@@ -319,9 +224,8 @@ function handleMouseUp(e) {
         const path = drawingPaths.get(currentPathId);
         
         if (path && path.points.length > 0) {
-            // Add final point if different from last
             const lastPoint = path.points[path.points.length - 1];
-            if (Math.abs(coords.x - lastPoint.x) > 0.1 || Math.abs(coords.y - lastPoint.y) > 0.1) {
+            if (Math.abs(coords.x - lastPoint.x) > 0.01 || Math.abs(coords.y - lastPoint.y) > 0.01) {
                 const finalPoint = { x: coords.x, y: coords.y };
                 path.points.push(finalPoint);
                 
@@ -332,7 +236,6 @@ function handleMouseUp(e) {
                 }
             }
             
-            // Final redraw
             redrawCanvas();
         }
         
@@ -352,7 +255,6 @@ function handleMouseUp(e) {
 
 function handleTouchStart(e) {
     if (e.touches.length === 1) {
-        // Single touch - handle drawing/panning
         const touch = e.touches[0];
         const mouseEvent = new MouseEvent('mousedown', {
             clientX: touch.clientX,
@@ -363,12 +265,10 @@ function handleTouchStart(e) {
         });
         canvas.dispatchEvent(mouseEvent);
         
-        // Only prevent default for drawing/erasing/text modes
         if (mode === 'draw' || mode === 'erase' || mode === 'text') {
             e.preventDefault();
         }
     } else if (e.touches.length === 2) {
-        // Two-finger touch for pinch zoom
         e.preventDefault();
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
@@ -378,23 +278,19 @@ function handleTouchStart(e) {
             touch2.clientY - touch1.clientY
         );
         
-        // Store initial transform state
         initialScale = scale;
         initialPanX = panX;
         initialPanY = panY;
         
-        // Calculate center point of pinch
         const rect = canvas.getBoundingClientRect();
         const centerX = (touch1.clientX + touch2.clientX) / 2 - rect.left;
         const centerY = (touch1.clientY + touch2.clientY) / 2 - rect.top;
         
-        // Convert to canvas coordinates
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
-        const worldX = centerX * scaleX / scale - panX;
-        const worldY = centerY * scaleY / scale - panY;
+        const worldX = (centerX * scaleX / scale) - panX;
+        const worldY = (centerY * scaleY / scale) - panY;
         
-        // Store for zoom calculation
         canvas._pinchCenter = { worldX, worldY, screenX: centerX, screenY: centerY };
     }
 }
@@ -411,7 +307,6 @@ function handleTouchMove(e) {
         });
         canvas.dispatchEvent(mouseEvent);
     } else if (e.touches.length === 2) {
-        // Handle pinch zoom
         e.preventDefault();
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
@@ -426,13 +321,12 @@ function handleTouchMove(e) {
             const newScale = initialScale * zoomFactor;
             scale = Math.max(0.1, Math.min(5, newScale));
             
-            // Adjust pan to zoom towards pinch center
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
             
-            panX = (canvas._pinchCenter.screenX * scaleX) / scale - canvas._pinchCenter.worldX;
-            panY = (canvas._pinchCenter.screenY * scaleY) / scale - canvas._pinchCenter.worldY;
+            panX = (canvas._pinchCenter.screenX * scaleX / scale) - canvas._pinchCenter.worldX;
+            panY = (canvas._pinchCenter.screenY * scaleY / scale) - canvas._pinchCenter.worldY;
             
             redrawCanvas();
         }
@@ -449,7 +343,6 @@ function handleTouchEnd(e) {
         lastTouchDistance = null;
         canvas._pinchCenter = null;
     } else if (e.touches.length === 1) {
-        // Switched from 2 fingers to 1 - reset
         lastTouchDistance = null;
         canvas._pinchCenter = null;
     }
@@ -463,20 +356,17 @@ function handleWheel(e) {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    // Get canvas coordinates before zoom
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const worldX = mouseX * scaleX / scale - panX;
-    const worldY = mouseY * scaleY / scale - panY;
+    const worldX = (mouseX * scaleX / scale) - panX;
+    const worldY = (mouseY * scaleY / scale) - panY;
     
-    // Zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
     scale *= zoomFactor;
     scale = Math.max(0.1, Math.min(5, scale));
     
-    // Adjust pan to zoom towards mouse position
-    panX = (mouseX * scaleX) / scale - worldX;
-    panY = (mouseY * scaleY) / scale - worldY;
+    panX = (mouseX * scaleX / scale) - worldX;
+    panY = (mouseY * scaleY / scale) - worldY;
     
     redrawCanvas();
 }
@@ -492,9 +382,8 @@ function showTextInput(x, y) {
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     
-    // Convert canvas coordinates to screen coordinates
-    const screenX = (x * scale + panX * scale) * (rect.width / canvas.width) + rect.left;
-    const screenY = (y * scale + panY * scale) * (rect.height / canvas.height) + rect.top;
+    const screenX = ((x + panX) * scale) * (rect.width / canvas.width) + rect.left;
+    const screenY = ((y + panY) * scale) * (rect.height / canvas.height) + rect.top;
     
     overlay.style.display = 'block';
     overlay.style.left = screenX + 'px';
@@ -511,7 +400,6 @@ function showTextInput(x, y) {
         } else if (e.key === 'Escape') {
             overlay.style.display = 'none';
         }
-        // Allow spacebar to work normally in text input
         if (e.code === 'Space') {
             e.stopPropagation();
         }
@@ -531,19 +419,16 @@ function submitText(x, y, text) {
 }
 
 function eraseAt(x, y) {
-    // Check for nearby elements locally first
-    const eraseRadius = 20; // pixels
+    const eraseRadius = 20;
     const itemsToErase = [];
     
     canvasData.forEach((item, index) => {
         if (item.type === 'text') {
-            // For text, check if eraser is near the text position
             const distance = Math.sqrt(Math.pow(item.x - x, 2) + Math.pow(item.y - y, 2));
             if (distance < eraseRadius) {
                 itemsToErase.push(index);
             }
         } else if (item.type === 'draw' && item.pathId) {
-            // For paths, check if eraser is near any point in the path
             let points = null;
             const path = drawingPaths.get(item.pathId);
             if (path && path.points.length > 0) {
@@ -564,7 +449,6 @@ function eraseAt(x, y) {
         }
     });
     
-    // Remove items in reverse order to maintain indices
     itemsToErase.reverse().forEach(index => {
         const item = canvasData[index];
         if (item.pathId) {
@@ -576,7 +460,6 @@ function eraseAt(x, y) {
     if (itemsToErase.length > 0) {
         redrawCanvas();
         
-        // Throttle server calls during dragging
         const now = Date.now();
         if (now - lastEraseTime > ERASE_THROTTLE) {
             socket.emit('erase', { x, y, eraseRadius });
@@ -588,17 +471,17 @@ function eraseAt(x, y) {
 function redrawCanvas() {
     if (!canvas || !ctx) return;
     
+    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Apply transform: translate then scale
     ctx.save();
-    // Transform order: translate first, then scale
-    // This means world coordinates (x, y) become ((x + panX) * scale, (y + panY) * scale) on screen
-    ctx.translate(panX, panY);
+    ctx.translate(panX * scale, panY * scale);
     ctx.scale(scale, scale);
     
-    // Draw all canvas elements
+    // Draw all paths
     canvasData.forEach(item => {
         if (item.type === 'draw' && item.pathId) {
-            // Try to get from drawingPaths first, then from item.pathPoints
             let points = null;
             const path = drawingPaths.get(item.pathId);
             if (path && path.points.length > 0) {
@@ -609,29 +492,21 @@ function redrawCanvas() {
             
             if (points && points.length > 0) {
                 ctx.beginPath();
+                ctx.moveTo(points[0].x, points[0].y);
                 
-                if (points.length === 1) {
-                    // Single point - draw a small circle
-                    ctx.arc(points[0].x, points[0].y, 1 / scale, 0, Math.PI * 2);
-                    ctx.fillStyle = '#e0e0e0';
-                    ctx.fill();
-                } else {
-                    // Draw simple connected lines - no complex curves
-                    ctx.moveTo(points[0].x, points[0].y);
-                    for (let i = 1; i < points.length; i++) {
-                        ctx.lineTo(points[i].x, points[i].y);
-                    }
-                    
-                    ctx.strokeStyle = '#e0e0e0';
-                    ctx.lineWidth = 2 / scale;
-                    ctx.lineCap = 'round';
-                    ctx.lineJoin = 'round';
-                    ctx.stroke();
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x, points[i].y);
                 }
+                
+                ctx.strokeStyle = '#e0e0e0';
+                ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.stroke();
             }
         } else if (item.type === 'text') {
             ctx.fillStyle = '#e0e0e0';
-            ctx.font = `${(item.fontSize || 16) / scale}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif`;
+            ctx.font = `${item.fontSize || 16}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif`;
             ctx.fillText(item.text, item.x, item.y);
         }
     });
@@ -644,7 +519,6 @@ socket.on('joined', (data) => {
     participantNumber = data.number;
     canvasData = data.canvasData || [];
     
-    // Initialize drawing paths from existing canvas data
     canvasData.forEach(item => {
         if (item.type === 'draw' && item.pathId && item.pathPoints) {
             drawingPaths.set(item.pathId, {
@@ -658,12 +532,10 @@ socket.on('joined', (data) => {
     document.getElementById('joinModal').classList.remove('show');
     document.getElementById('mainInterface').style.display = 'flex';
     
-    // Ensure canvas is initialized and visible
     if (!canvas) {
         initCanvas();
     }
     
-    // Resize canvas to fit container
     setTimeout(() => {
         resizeCanvas();
         redrawCanvas();
@@ -671,7 +543,6 @@ socket.on('joined', (data) => {
     
     updateParticipantCount(data.roomState.participants.length);
     
-    // Set room start time if room is active
     if (data.roomState.roomActive && data.roomState.timeElapsed) {
         roomStartTime = Date.now() - data.roomState.timeElapsed;
     } else if (data.roomState.roomActive) {
@@ -698,7 +569,6 @@ socket.on('canvasUpdate', (action) => {
                 points: [],
                 participantNumber: action.participantNumber
             });
-            // Add to canvasData for persistence (only if it doesn't already exist)
             const existingItem = canvasData.find(item => item.pathId === action.pathId);
             if (!existingItem) {
                 canvasData.push({
@@ -710,7 +580,6 @@ socket.on('canvasUpdate', (action) => {
         const path = drawingPaths.get(action.pathId);
         if (action.action === 'start' || action.action === 'move') {
             path.points.push({ x: action.x, y: action.y });
-            // Update in canvasData too
             const canvasItem = canvasData.find(item => item.pathId === action.pathId);
             if (canvasItem) {
                 if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
@@ -719,7 +588,6 @@ socket.on('canvasUpdate', (action) => {
         }
         redrawCanvas();
     } else if (action.type === 'text') {
-        // Only add to canvasData if it's a new text item
         const existingText = canvasData.find(item => 
             item.type === 'text' && 
             item.x === action.x && 
@@ -764,7 +632,6 @@ socket.on('canvasErase', (data) => {
         }
     });
     
-    // Remove items in reverse order
     itemsToRemove.reverse().forEach(index => {
         const item = canvasData[index];
         if (item.pathId) {
@@ -854,7 +721,6 @@ document.getElementById('closeInstructions').addEventListener('click', () => {
     document.getElementById('instructionsModal').classList.remove('show');
 });
 
-// Close instructions modal when clicking outside
 document.getElementById('instructionsModal').addEventListener('click', (e) => {
     if (e.target.id === 'instructionsModal') {
         document.getElementById('instructionsModal').classList.remove('show');
@@ -870,32 +736,24 @@ document.getElementById('closeAbout').addEventListener('click', () => {
     document.getElementById('aboutModal').classList.remove('show');
 });
 
-// Close about modal when clicking outside
 document.getElementById('aboutModal').addEventListener('click', (e) => {
     if (e.target.id === 'aboutModal') {
         document.getElementById('aboutModal').classList.remove('show');
     }
 });
 
-// Add click handler for viewing author info
-// Use a separate event listener that checks if we're not actively drawing/erasing
+// Author info click handler
 let authorInfoTimeout = null;
 canvas.addEventListener('click', (e) => {
-    // Don't show author info if:
-    // 1. We're actively drawing
-    // 2. We're in erase mode (will erase instead)
-    // 3. We're in text mode (will show text input instead)
     if (mode === 'erase' || mode === 'text' || isDrawing) {
         return;
     }
     
-    // Small delay to allow any other handlers to process first
     if (authorInfoTimeout) {
         clearTimeout(authorInfoTimeout);
     }
     
     authorInfoTimeout = setTimeout(() => {
-        // Double-check we're still not in an active mode
         if (mode !== 'erase' && mode !== 'text' && !isDrawing) {
             const coords = getCanvasCoordinates(e);
             showAuthorInfo(coords.x, coords.y);
@@ -903,11 +761,9 @@ canvas.addEventListener('click', (e) => {
     }, 100);
 });
 
-// Add touch handler for author info on mobile
 canvas.addEventListener('touchend', (e) => {
     if (e.touches.length === 0 && mode !== 'erase' && mode !== 'text' && !isDrawing) {
         const touch = e.changedTouches[0];
-        const rect = canvas.getBoundingClientRect();
         const mouseEvent = new MouseEvent('click', {
             clientX: touch.clientX,
             clientY: touch.clientY,
@@ -917,6 +773,81 @@ canvas.addEventListener('touchend', (e) => {
         canvas.dispatchEvent(mouseEvent);
     }
 });
+
+function showAuthorInfo(x, y) {
+    const clickRadius = 30;
+    let foundItem = null;
+    
+    for (const item of canvasData) {
+        if (item.type === 'text') {
+            const distance = Math.sqrt(Math.pow(item.x - x, 2) + Math.pow(item.y - y, 2));
+            if (distance < clickRadius) {
+                foundItem = item;
+                break;
+            }
+        } else if (item.type === 'draw' && item.pathId) {
+            let points = null;
+            const path = drawingPaths.get(item.pathId);
+            if (path && path.points.length > 0) {
+                points = path.points;
+            } else if (item.pathPoints && item.pathPoints.length > 0) {
+                points = item.pathPoints;
+            }
+            
+            if (points) {
+                for (let i = 0; i < points.length; i++) {
+                    const distance = Math.sqrt(Math.pow(points[i].x - x, 2) + Math.pow(points[i].y - y, 2));
+                    if (distance < clickRadius) {
+                        foundItem = item;
+                        break;
+                    }
+                }
+            }
+        }
+        if (foundItem) break;
+    }
+    
+    if (foundItem && foundItem.participantNumber) {
+        const authorInfo = document.getElementById('authorInfo');
+        if (authorInfo) {
+            authorInfo.textContent = `Author: Participant #${foundItem.participantNumber}`;
+            authorInfo.style.display = 'block';
+            
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            let screenX = ((x + panX) * scale) * (rect.width / canvas.width) + rect.left;
+            let screenY = ((y + panY) * scale) * (rect.height / canvas.height) + rect.top;
+            
+            authorInfo.style.visibility = 'hidden';
+            authorInfo.style.display = 'block';
+            const infoWidth = authorInfo.offsetWidth || 200;
+            const infoHeight = authorInfo.offsetHeight || 30;
+            authorInfo.style.visibility = 'visible';
+            
+            const padding = 10;
+            if (screenX + infoWidth > window.innerWidth - padding) {
+                screenX = window.innerWidth - infoWidth - padding;
+            }
+            if (screenX < padding) {
+                screenX = padding;
+            }
+            if (screenY - infoHeight < padding) {
+                screenY = screenY + 40;
+            }
+            if (screenY + infoHeight > window.innerHeight - padding) {
+                screenY = window.innerHeight - infoHeight - padding;
+            }
+            
+            authorInfo.style.left = screenX + 'px';
+            authorInfo.style.top = (screenY - infoHeight) + 'px';
+            
+            setTimeout(() => {
+                authorInfo.style.display = 'none';
+            }, 5000);
+        }
+    }
+}
 
 function updateModeButtons() {
     document.getElementById('drawMode').classList.toggle('active', mode === 'draw');
@@ -929,7 +860,6 @@ function showVotingModal(round) {
     document.getElementById('votingRoundNumber').textContent = round;
     selectedVotes.clear();
     
-    // Get current participants
     socket.emit('getParticipants', {}, (participants) => {
         const container = document.getElementById('votingParticipants');
         container.innerHTML = '';
@@ -939,7 +869,7 @@ function showVotingModal(round) {
             document.getElementById('submitVote').disabled = true;
         } else {
             participants.forEach(p => {
-                if (p.number === participantNumber) return; // Can't vote for self
+                if (p.number === participantNumber) return;
                 
                 const div = document.createElement('div');
                 div.className = 'voting-participant';
@@ -1052,14 +982,12 @@ function updateRoomTimer() {
     }
 }
 
-// Update timer every second
 setInterval(updateRoomTimer, 1000);
 
 function updateParticipantCount(count) {
     if (count !== undefined) {
         document.getElementById('participantCount').textContent = count;
     } else {
-        // Request from server
         socket.emit('getParticipantCount', {}, (count) => {
             document.getElementById('participantCount').textContent = count;
         });
@@ -1070,6 +998,5 @@ function updateParticipantCount(count) {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initCanvas);
 } else {
-    // DOM already loaded
     setTimeout(initCanvas, 0);
 }
