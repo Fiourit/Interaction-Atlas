@@ -117,8 +117,8 @@ function getCanvasCoordinates(e) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const x = ((e.clientX - rect.left) * scaleX - panX * scale) / scale;
-    const y = ((e.clientY - rect.top) * scaleY - panY * scale) / scale;
+    const x = (e.clientX - rect.left) * scaleX / scale - panX;
+    const y = (e.clientY - rect.top) * scaleY / scale - panY;
     return { x, y };
 }
 
@@ -379,8 +379,8 @@ function handleTouchStart(e) {
         // Convert to canvas coordinates
         const scaleX = canvas.width / rect.width;
         const scaleY = canvas.height / rect.height;
-        const worldX = (centerX * scaleX - panX * scale) / scale;
-        const worldY = (centerY * scaleY - panY * scale) / scale;
+        const worldX = centerX * scaleX / scale - panX;
+        const worldY = centerY * scaleY / scale - panY;
         
         // Store for zoom calculation
         canvas._pinchCenter = { worldX, worldY, screenX: centerX, screenY: centerY };
@@ -454,8 +454,8 @@ function handleWheel(e) {
     // Get canvas coordinates before zoom
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const worldX = (mouseX * scaleX - panX * scale) / scale;
-    const worldY = (mouseY * scaleY - panY * scale) / scale;
+    const worldX = mouseX * scaleX / scale - panX;
+    const worldY = mouseY * scaleY / scale - panY;
     
     // Zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
