@@ -450,8 +450,10 @@ function handleTouchMove(e) {
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
             
-            panX = (canvas._pinchCenter.screenX * scaleX / scale) - canvas._pinchCenter.worldX;
-            panY = (canvas._pinchCenter.screenY * scaleY / scale) - canvas._pinchCenter.worldY;
+            // Adjust pan so the pinch center stays in the same screen position
+            // Formula: newPan = oldPan + screenPoint * canvasScale * (1/newScale - 1/oldScale)
+            panX = initialPanX + canvas._pinchCenter.screenX * scaleX * (1 / scale - 1 / initialScale);
+            panY = initialPanY + canvas._pinchCenter.screenY * scaleY * (1 / scale - 1 / initialScale);
             
             redrawCanvas();
         }
@@ -522,17 +524,22 @@ function handleWheel(e) {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
+    // Get world coordinates of point under cursor before zoom
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const worldX = (mouseX * scaleX / scale) - panX;
-    const worldY = (mouseY * scaleY / scale) - panY;
+    const oldScale = scale;
+    const worldX = (mouseX * scaleX / oldScale) - panX;
+    const worldY = (mouseY * scaleY / oldScale) - panY;
     
+    // Apply zoom
     const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    scale *= zoomFactor;
-    scale = Math.max(0.1, Math.min(5, scale));
+    const newScale = oldScale * zoomFactor;
+    scale = Math.max(0.1, Math.min(5, newScale));
     
-    panX = (mouseX * scaleX / scale) - worldX;
-    panY = (mouseY * scaleY / scale) - worldY;
+    // Adjust pan so the same world point stays under the cursor
+    // Formula: newPan = oldPan + screenPoint * canvasScale * (1/newScale - 1/oldScale)
+    panX = panX + mouseX * scaleX * (1 / scale - 1 / oldScale);
+    panY = panY + mouseY * scaleY * (1 / scale - 1 / oldScale);
     
     redrawCanvas();
 }
