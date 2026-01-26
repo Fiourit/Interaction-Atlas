@@ -115,11 +115,23 @@ function resizeCanvas() {
 function getCanvasCoordinates(e) {
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX / scale - panX;
-    const y = (e.clientY - rect.top) * scaleY / scale - panY;
-    return { x, y };
+    
+    // Get screen coordinates relative to canvas (in CSS pixels)
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    
+    // Convert to canvas internal pixel coordinates
+    // (accounting for device pixel ratio and canvas size)
+    const canvasX = (screenX / rect.width) * canvas.width;
+    const canvasY = (screenY / rect.height) * canvas.height;
+    
+    // Convert to world coordinates
+    // Transform is: translate(panX, panY) then scale(scale, scale)
+    // So inverse is: divide by scale, then subtract pan
+    const worldX = (canvasX / scale) - panX;
+    const worldY = (canvasY / scale) - panY;
+    
+    return { x: worldX, y: worldY };
 }
 
 function handleMouseDown(e) {
@@ -134,20 +146,22 @@ function handleMouseDown(e) {
     
     const coords = getCanvasCoordinates(e);
     
-    
     if (mode === 'draw') {
         isDrawing = true;
         currentPathId = `${socket.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Initialize path with first point
+        const firstPoint = { x: coords.x, y: coords.y };
         drawingPaths.set(currentPathId, {
-            points: [{ x: coords.x, y: coords.y }],
+            points: [firstPoint],
             participantNumber: participantNumber
         });
         
-        // Add to canvasData immediately so it's included in redraws
+        // Add to canvasData immediately
         canvasData.push({
             type: 'draw',
             pathId: currentPathId,
-            pathPoints: [{ x: coords.x, y: coords.y }],
+            pathPoints: [firstPoint],
             participantNumber: participantNumber
         });
         
@@ -164,7 +178,7 @@ function handleMouseDown(e) {
     } else if (mode === 'text') {
         showTextInput(coords.x, coords.y);
     } else if (mode === 'erase') {
-        isDrawing = true; // Track erasing as drawing-like action
+        isDrawing = true;
         eraseAt(coords.x, coords.y);
     }
 }
@@ -259,30 +273,40 @@ function handleMouseMove(e) {
     if (mode === 'draw' && isDrawing && currentPathId) {
         const coords = getCanvasCoordinates(e);
         const path = drawingPaths.get(currentPathId);
-        if (path) {
-            path.points.push({ x: coords.x, y: coords.y });
-            
-            // Update canvasData to keep it in sync
-            const canvasItem = canvasData.find(item => item.pathId === currentPathId);
-            if (canvasItem) {
-                if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
-                canvasItem.pathPoints.push({ x: coords.x, y: coords.y });
-            }
-            
-            // Redraw the entire canvas to ensure correct rendering
-            redrawCanvas();
-        }
         
-        // Send to server
-        socket.emit('canvasAction', {
-            type: 'draw',
-            pathId: currentPathId,
-            x: coords.x,
-            y: coords.y,
-            action: 'move'
-        });
+        if (path && path.points.length > 0) {
+            // Only add point if it's significantly different from the last point
+            const lastPoint = path.points[path.points.length - 1];
+            const dx = coords.x - lastPoint.x;
+            const dy = coords.y - lastPoint.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Add point if moved at least 1 pixel (in world coordinates)
+            if (distance > 1 / scale) {
+                const newPoint = { x: coords.x, y: coords.y };
+                path.points.push(newPoint);
+                
+                // Update canvasData to keep it in sync
+                const canvasItem = canvasData.find(item => item.pathId === currentPathId);
+                if (canvasItem) {
+                    if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
+                    canvasItem.pathPoints.push(newPoint);
+                }
+                
+                // Redraw the entire canvas
+                redrawCanvas();
+                
+                // Send to server
+                socket.emit('canvasAction', {
+                    type: 'draw',
+                    pathId: currentPathId,
+                    x: coords.x,
+                    y: coords.y,
+                    action: 'move'
+                });
+            }
+        }
     } else if (mode === 'erase' && isDrawing) {
-        // Allow erasing while dragging
         const coords = getCanvasCoordinates(e);
         eraseAt(coords.x, coords.y);
     }
@@ -293,14 +317,19 @@ function handleMouseUp(e) {
         isDrawing = false;
         const coords = getCanvasCoordinates(e);
         const path = drawingPaths.get(currentPathId);
-        if (path) {
-            path.points.push({ x: coords.x, y: coords.y });
-            
-            // Update canvasData to keep it in sync
-            const canvasItem = canvasData.find(item => item.pathId === currentPathId);
-            if (canvasItem) {
-                if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
-                canvasItem.pathPoints.push({ x: coords.x, y: coords.y });
+        
+        if (path && path.points.length > 0) {
+            // Add final point if different from last
+            const lastPoint = path.points[path.points.length - 1];
+            if (Math.abs(coords.x - lastPoint.x) > 0.1 || Math.abs(coords.y - lastPoint.y) > 0.1) {
+                const finalPoint = { x: coords.x, y: coords.y };
+                path.points.push(finalPoint);
+                
+                const canvasItem = canvasData.find(item => item.pathId === currentPathId);
+                if (canvasItem) {
+                    if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
+                    canvasItem.pathPoints.push(finalPoint);
+                }
             }
             
             // Final redraw
@@ -561,8 +590,10 @@ function redrawCanvas() {
     
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
-    ctx.scale(scale, scale);
+    // Transform order: translate first, then scale
+    // This means world coordinates (x, y) become ((x + panX) * scale, (y + panY) * scale) on screen
     ctx.translate(panX, panY);
+    ctx.scale(scale, scale);
     
     // Draw all canvas elements
     canvasData.forEach(item => {
@@ -582,37 +613,21 @@ function redrawCanvas() {
                 if (points.length === 1) {
                     // Single point - draw a small circle
                     ctx.arc(points[0].x, points[0].y, 1 / scale, 0, Math.PI * 2);
+                    ctx.fillStyle = '#e0e0e0';
                     ctx.fill();
                 } else {
-                    // Draw smooth curves
+                    // Draw simple connected lines - no complex curves
                     ctx.moveTo(points[0].x, points[0].y);
-                    
-                    if (points.length === 2) {
-                        ctx.lineTo(points[1].x, points[1].y);
-                    } else {
-                        // Use quadratic curves for smooth lines
-                        for (let i = 1; i < points.length - 1; i++) {
-                            const xc = (points[i].x + points[i + 1].x) / 2;
-                            const yc = (points[i].y + points[i + 1].y) / 2;
-                            ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
-                        }
-                        
-                        // Connect to the last point
-                        const lastIndex = points.length - 1;
-                        ctx.quadraticCurveTo(
-                            points[lastIndex - 1].x, 
-                            points[lastIndex - 1].y,
-                            points[lastIndex].x, 
-                            points[lastIndex].y
-                        );
+                    for (let i = 1; i < points.length; i++) {
+                        ctx.lineTo(points[i].x, points[i].y);
                     }
+                    
+                    ctx.strokeStyle = '#e0e0e0';
+                    ctx.lineWidth = 2 / scale;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    ctx.stroke();
                 }
-                
-                ctx.strokeStyle = '#e0e0e0';
-                ctx.lineWidth = 2 / scale;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.stroke();
             }
         } else if (item.type === 'text') {
             ctx.fillStyle = '#e0e0e0';
