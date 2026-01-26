@@ -23,6 +23,12 @@ let lastTouchDistance = null;
 let initialScale = 1;
 let initialPanX = 0;
 let initialPanY = 0;
+let touchStartTime = 0;
+let touchStartX = 0;
+let touchStartY = 0;
+let isTouchPanning = false;
+let lastTouchX = 0;
+let lastTouchY = 0;
 
 // Initialize canvas
 function initCanvas() {
@@ -113,8 +119,19 @@ function getCanvasCoordinates(e) {
     if (!canvas) return { x: 0, y: 0 };
     
     const rect = canvas.getBoundingClientRect();
-    const clientX = e.clientX || (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
-    const clientY = e.clientY || (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+    let clientX, clientY;
+    
+    // Handle both mouse and touch events
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX;
+        clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX;
+        clientY = e.changedTouches[0].clientY;
+    } else {
+        clientX = e.clientX;
+        clientY = e.clientY;
+    }
     
     // Get position relative to canvas element
     const x = clientX - rect.left;
@@ -124,7 +141,10 @@ function getCanvasCoordinates(e) {
     const canvasX = (x / rect.width) * canvas.width;
     const canvasY = (y / rect.height) * canvas.height;
     
-    // Convert to world coordinates (inverse of transform: translate then scale)
+    // Convert to world coordinates
+    // Transform is: translate(panX, panY) then scale(scale, scale)
+    // So world point (x, y) becomes ((x + panX) * scale, (y + panY) * scale) on screen
+    // Inverse: screen point becomes ((screenX / scale) - panX, (screenY / scale) - panY) in world
     const worldX = (canvasX / scale) - panX;
     const worldY = (canvasY / scale) - panY;
     
@@ -256,20 +276,66 @@ function handleMouseUp(e) {
 function handleTouchStart(e) {
     if (e.touches.length === 1) {
         const touch = e.touches[0];
-        const mouseEvent = new MouseEvent('mousedown', {
-            clientX: touch.clientX,
-            clientY: touch.clientY,
-            bubbles: true,
-            cancelable: true,
-            button: 0
-        });
-        canvas.dispatchEvent(mouseEvent);
+        touchStartTime = Date.now();
+        touchStartX = touch.clientX;
+        touchStartY = touch.clientY;
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
         
+        // If in draw/erase/text mode, handle drawing directly
         if (mode === 'draw' || mode === 'erase' || mode === 'text') {
+            e.preventDefault();
+            // Create a synthetic event object for getCanvasCoordinates
+            const syntheticEvent = {
+                touches: [touch],
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            };
+            const coords = getCanvasCoordinates(syntheticEvent);
+            
+            if (mode === 'draw') {
+                isDrawing = true;
+                currentPathId = `${socket.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                
+                const firstPoint = { x: coords.x, y: coords.y };
+                drawingPaths.set(currentPathId, {
+                    points: [firstPoint],
+                    participantNumber: participantNumber
+                });
+                
+                canvasData.push({
+                    type: 'draw',
+                    pathId: currentPathId,
+                    pathPoints: [firstPoint],
+                    participantNumber: participantNumber
+                });
+                
+                redrawCanvas();
+                
+                socket.emit('canvasAction', {
+                    type: 'draw',
+                    pathId: currentPathId,
+                    x: coords.x,
+                    y: coords.y,
+                    action: 'start'
+                });
+            } else if (mode === 'text') {
+                showTextInput(coords.x, coords.y);
+            } else if (mode === 'erase') {
+                isDrawing = true;
+                eraseAt(coords.x, coords.y);
+            }
+        } else {
+            // Not in draw mode - allow panning
+            isTouchPanning = true;
             e.preventDefault();
         }
     } else if (e.touches.length === 2) {
         e.preventDefault();
+        isTouchPanning = false;
+        isDrawing = false;
+        currentPathId = null;
+        
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
         
@@ -296,18 +362,77 @@ function handleTouchStart(e) {
 }
 
 function handleTouchMove(e) {
-    if (e.touches.length === 1 && (mode === 'draw' || mode === 'erase' || mode === 'text')) {
-        e.preventDefault();
+    if (e.touches.length === 1) {
         const touch = e.touches[0];
-        const mouseEvent = new MouseEvent('mousemove', {
-            clientX: touch.clientX,
-            clientY: touch.clientY,
-            bubbles: true,
-            cancelable: true
-        });
-        canvas.dispatchEvent(mouseEvent);
+        
+        if (mode === 'draw' && isDrawing && currentPathId) {
+            e.preventDefault();
+            const syntheticEvent = {
+                touches: [touch],
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            };
+            const coords = getCanvasCoordinates(syntheticEvent);
+            const path = drawingPaths.get(currentPathId);
+            
+            if (path && path.points.length > 0) {
+                const lastPoint = path.points[path.points.length - 1];
+                const dx = coords.x - lastPoint.x;
+                const dy = coords.y - lastPoint.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 0.5) {
+                    const newPoint = { x: coords.x, y: coords.y };
+                    path.points.push(newPoint);
+                    
+                    const canvasItem = canvasData.find(item => item.pathId === currentPathId);
+                    if (canvasItem) {
+                        if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
+                        canvasItem.pathPoints.push(newPoint);
+                    }
+                    
+                    redrawCanvas();
+                    
+                    socket.emit('canvasAction', {
+                        type: 'draw',
+                        pathId: currentPathId,
+                        x: coords.x,
+                        y: coords.y,
+                        action: 'move'
+                    });
+                }
+            }
+        } else if (mode === 'erase' && isDrawing) {
+            e.preventDefault();
+            const syntheticEvent = {
+                touches: [touch],
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            };
+            const coords = getCanvasCoordinates(syntheticEvent);
+            eraseAt(coords.x, coords.y);
+        } else if (isTouchPanning) {
+            e.preventDefault();
+            const dx = touch.clientX - lastTouchX;
+            const dy = touch.clientY - lastTouchY;
+            
+            // Convert screen movement to world movement
+            const rect = canvas.getBoundingClientRect();
+            const worldDx = (dx / rect.width) * (canvas.width / scale);
+            const worldDy = (dy / rect.height) * (canvas.height / scale);
+            
+            panX += worldDx;
+            panY += worldDy;
+            
+            lastTouchX = touch.clientX;
+            lastTouchY = touch.clientY;
+            
+            redrawCanvas();
+        }
     } else if (e.touches.length === 2) {
         e.preventDefault();
+        isTouchPanning = false;
+        
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
         
@@ -330,16 +455,57 @@ function handleTouchMove(e) {
             
             redrawCanvas();
         }
+        
+        lastTouchDistance = currentDistance;
     }
 }
 
 function handleTouchEnd(e) {
+    if (mode === 'draw' && isDrawing && currentPathId) {
+        const touch = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : null;
+        if (touch) {
+            const syntheticEvent = {
+                touches: [touch],
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            };
+            const coords = getCanvasCoordinates(syntheticEvent);
+            const path = drawingPaths.get(currentPathId);
+            
+            if (path && path.points.length > 0) {
+                const lastPoint = path.points[path.points.length - 1];
+                if (Math.abs(coords.x - lastPoint.x) > 0.01 || Math.abs(coords.y - lastPoint.y) > 0.01) {
+                    const finalPoint = { x: coords.x, y: coords.y };
+                    path.points.push(finalPoint);
+                    
+                    const canvasItem = canvasData.find(item => item.pathId === currentPathId);
+                    if (canvasItem) {
+                        if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
+                        canvasItem.pathPoints.push(finalPoint);
+                    }
+                }
+                
+                redrawCanvas();
+            }
+            
+            socket.emit('canvasAction', {
+                type: 'draw',
+                pathId: currentPathId,
+                x: coords.x,
+                y: coords.y,
+                action: 'end'
+            });
+        }
+        
+        isDrawing = false;
+        currentPathId = null;
+    } else if (mode === 'erase' && isDrawing) {
+        isDrawing = false;
+    }
+    
+    isTouchPanning = false;
+    
     if (e.touches.length === 0) {
-        const mouseEvent = new MouseEvent('mouseup', {
-            bubbles: true,
-            cancelable: true
-        });
-        canvas.dispatchEvent(mouseEvent);
         lastTouchDistance = null;
         canvas._pinchCenter = null;
     } else if (e.touches.length === 1) {
@@ -475,8 +641,9 @@ function redrawCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Apply transform: translate then scale
+    // This means world point (x, y) becomes ((x + panX) * scale, (y + panY) * scale) on screen
     ctx.save();
-    ctx.translate(panX * scale, panY * scale);
+    ctx.translate(panX, panY);
     ctx.scale(scale, scale);
     
     // Draw all paths
@@ -761,16 +928,23 @@ canvas.addEventListener('click', (e) => {
     }, 100);
 });
 
+// Handle tap for author info on mobile
 canvas.addEventListener('touchend', (e) => {
-    if (e.touches.length === 0 && mode !== 'erase' && mode !== 'text' && !isDrawing) {
+    if (e.touches.length === 0 && mode !== 'erase' && mode !== 'text' && !isDrawing && !isTouchPanning) {
         const touch = e.changedTouches[0];
-        const mouseEvent = new MouseEvent('click', {
-            clientX: touch.clientX,
-            clientY: touch.clientY,
-            bubbles: true,
-            cancelable: true
-        });
-        canvas.dispatchEvent(mouseEvent);
+        const timeDiff = Date.now() - touchStartTime;
+        const dist = Math.hypot(touch.clientX - touchStartX, touch.clientY - touchStartY);
+        
+        // Only treat as tap if it was quick and didn't move much
+        if (timeDiff < 300 && dist < 10) {
+            const syntheticEvent = {
+                touches: [touch],
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            };
+            const coords = getCanvasCoordinates(syntheticEvent);
+            showAuthorInfo(coords.x, coords.y);
+        }
     }
 });
 
