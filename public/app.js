@@ -143,12 +143,16 @@ function handleMouseDown(e) {
             participantNumber: participantNumber
         });
         
-        ctx.save();
-        ctx.scale(scale, scale);
-        ctx.translate(panX, panY);
-        ctx.beginPath();
-        ctx.moveTo(coords.x, coords.y);
-        ctx.restore();
+        // Add to canvasData immediately so it's included in redraws
+        canvasData.push({
+            type: 'draw',
+            pathId: currentPathId,
+            pathPoints: [{ x: coords.x, y: coords.y }],
+            participantNumber: participantNumber
+        });
+        
+        // Redraw to show the initial point
+        redrawCanvas();
         
         socket.emit('canvasAction', {
             type: 'draw',
@@ -258,46 +262,15 @@ function handleMouseMove(e) {
         if (path) {
             path.points.push({ x: coords.x, y: coords.y });
             
-            // Draw smooth curve using quadratic curves
-            if (path.points.length >= 2) {
-                ctx.save();
-                ctx.scale(scale, scale);
-                ctx.translate(panX, panY);
-                
-                ctx.beginPath();
-                const points = path.points;
-                
-                if (points.length === 2) {
-                    // First two points - just draw a line
-                    ctx.moveTo(points[0].x, points[0].y);
-                    ctx.lineTo(points[1].x, points[1].y);
-                } else {
-                    // Use quadratic curves for smooth lines
-                    ctx.moveTo(points[0].x, points[0].y);
-                    
-                    for (let i = 1; i < points.length - 1; i++) {
-                        const xc = (points[i].x + points[i + 1].x) / 2;
-                        const yc = (points[i].y + points[i + 1].y) / 2;
-                        ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
-                    }
-                    
-                    // Connect to the last point
-                    const lastIndex = points.length - 1;
-                    ctx.quadraticCurveTo(
-                        points[lastIndex - 1].x, 
-                        points[lastIndex - 1].y,
-                        points[lastIndex].x, 
-                        points[lastIndex].y
-                    );
-                }
-                
-                ctx.strokeStyle = '#e0e0e0';
-                ctx.lineWidth = 2 / scale;
-                ctx.lineCap = 'round';
-                ctx.lineJoin = 'round';
-                ctx.stroke();
-                ctx.restore();
+            // Update canvasData to keep it in sync
+            const canvasItem = canvasData.find(item => item.pathId === currentPathId);
+            if (canvasItem) {
+                if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
+                canvasItem.pathPoints.push({ x: coords.x, y: coords.y });
             }
+            
+            // Redraw the entire canvas to ensure correct rendering
+            redrawCanvas();
         }
         
         // Send to server
@@ -322,6 +295,16 @@ function handleMouseUp(e) {
         const path = drawingPaths.get(currentPathId);
         if (path) {
             path.points.push({ x: coords.x, y: coords.y });
+            
+            // Update canvasData to keep it in sync
+            const canvasItem = canvasData.find(item => item.pathId === currentPathId);
+            if (canvasItem) {
+                if (!canvasItem.pathPoints) canvasItem.pathPoints = [];
+                canvasItem.pathPoints.push({ x: coords.x, y: coords.y });
+            }
+            
+            // Final redraw
+            redrawCanvas();
         }
         
         socket.emit('canvasAction', {
@@ -694,22 +677,20 @@ socket.on('joinFailed', (data) => {
 });
 
 socket.on('canvasUpdate', (action) => {
-    // Only add to canvasData if it's a new item or text
-    if (action.type === 'text' || (action.type === 'draw' && action.action === 'start')) {
-        canvasData.push(action);
-    }
-    
     if (action.type === 'draw' && action.pathId) {
         if (!drawingPaths.has(action.pathId)) {
             drawingPaths.set(action.pathId, {
                 points: [],
                 participantNumber: action.participantNumber
             });
-            // Add to canvasData for persistence
-            canvasData.push({
-                ...action,
-                pathPoints: []
-            });
+            // Add to canvasData for persistence (only if it doesn't already exist)
+            const existingItem = canvasData.find(item => item.pathId === action.pathId);
+            if (!existingItem) {
+                canvasData.push({
+                    ...action,
+                    pathPoints: []
+                });
+            }
         }
         const path = drawingPaths.get(action.pathId);
         if (action.action === 'start' || action.action === 'move') {
@@ -723,6 +704,16 @@ socket.on('canvasUpdate', (action) => {
         }
         redrawCanvas();
     } else if (action.type === 'text') {
+        // Only add to canvasData if it's a new text item
+        const existingText = canvasData.find(item => 
+            item.type === 'text' && 
+            item.x === action.x && 
+            item.y === action.y && 
+            item.text === action.text
+        );
+        if (!existingText) {
+            canvasData.push(action);
+        }
         redrawCanvas();
     }
 });
